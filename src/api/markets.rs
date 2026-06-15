@@ -88,7 +88,7 @@ pub async fn list_markets(
 ) -> Result<Json<MarketListResponse>, (StatusCode, String)> {
     let oracles = state
         .predict_client
-        .list_oracles(PREDICT_ID)
+        .list_active_oracles(PREDICT_ID)
         .await
         .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
 
@@ -171,6 +171,43 @@ pub async fn get_strikes(
     };
 
     Ok(Json(StrikesResponse {
+        oracle: MarketSummary::from(&oracle_state.oracle),
+        grid,
+    }))
+}
+
+#[derive(serde::Serialize)]
+pub struct DensityResponse {
+    pub oracle: MarketSummary,
+    pub grid: Option<crate::engine::strike_grid::DensityGrid>,
+}
+
+/// GET /api/markets/:id/density
+/// The risk-neutral density the SVI surface prices (Breeden-Litzenberger),
+/// with the mode, P(up) and 5th/95th percentile band read off the curve.
+pub async fn get_density(
+    State(state): State<AppState>,
+    Path(oracle_id): Path<String>,
+) -> Result<Json<DensityResponse>, (StatusCode, String)> {
+    let oracle_state: OracleState = state
+        .predict_client
+        .oracle_state(&oracle_id)
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+
+    let now_ms = chrono::Utc::now().timestamp_millis();
+
+    let grid = match (&oracle_state.latest_price, &oracle_state.latest_svi) {
+        (Some(price), Some(svi)) => {
+            let params = crate::engine::svi::SviParams::from_event(svi);
+            let mut g = crate::engine::strike_grid::compute_density(price, &params, 81, 0.5);
+            g.seconds_until_expiry = oracle_state.oracle.seconds_until_expiry(now_ms);
+            Some(g)
+        }
+        _ => None,
+    };
+
+    Ok(Json(DensityResponse {
         oracle: MarketSummary::from(&oracle_state.oracle),
         grid,
     }))
@@ -409,5 +446,26 @@ pub async fn get_summary(
         .await
         .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
     Ok(Json(result))
+}
+
+#[derive(serde::Serialize)]
+pub struct VaultHealthResponse {
+    pub vault: crate::types::vault::VaultSummary,
+    pub health: crate::engine::vault_health::VaultHealth,
+}
+
+/// GET /api/vault/health
+/// The PLP vault's solvency read: a GREEN/AMBER/RED grade plus the numbers
+/// that justify it (worst-case payout coverage, utilization, exit liquidity).
+pub async fn get_vault_health(
+    State(state): State<AppState>,
+) -> Result<Json<VaultHealthResponse>, (StatusCode, String)> {
+    let vault = state
+        .predict_client
+        .vault_summary(PREDICT_ID)
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    let health = crate::engine::vault_health::compute_vault_health(&vault);
+    Ok(Json(VaultHealthResponse { vault, health }))
 }
 

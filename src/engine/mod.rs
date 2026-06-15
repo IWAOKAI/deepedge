@@ -11,3 +11,4 @@ pub use pricing::*;
 pub use strike_grid::*;
 pub use market_edge::*;
 pub use backtest::*;
+pub mod vault_health;

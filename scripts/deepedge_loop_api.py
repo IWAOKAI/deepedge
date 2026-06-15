@@ -157,6 +157,24 @@ def claude_json(system, user, max_tokens=600, retries=2):
     raise ValueError(f"claude_json failed after {retries + 1} attempts: {last_err}")
 
 # ---- observe ----
+def fetch_vault_health():
+    """Fetch the PLP vault's solvency grade. The vault underwrites every
+    position, so a stressed vault is a reason for the Risk Officer to be
+    more conservative regardless of the edge. Returns None on failure."""
+    try:
+        d = get('/api/vault/health')
+        h = d.get('health')
+        if not h:
+            return None
+        return {
+            "grade": h.get("grade"),
+            "max_payout_utilization": h.get("max_payout_utilization"),
+            "breach_headroom_pct": h.get("breach_headroom_pct"),
+            "withdrawal_headroom_pct": h.get("withdrawal_headroom_pct"),
+        }
+    except Exception:
+        return None
+
 def fetch_density(oid):
     """Fetch the Breeden-Litzenberger risk-neutral density summary for a
     market: the most-likely settlement (mode), the density-implied P(up),
@@ -211,13 +229,15 @@ def observe(oid=None):
             sys.exit('No market with usable edges')
         sel_oid = best['oracle']['oracle_id'] if 'oracle_id' in best['oracle'] else actives[0]['oracle_id']
         dens = fetch_density(sel_oid)
-        return sel_oid, best['oracle'], best_near, cal, dens
+        vault = fetch_vault_health()
+        return sel_oid, best['oracle'], best_near, cal, dens, vault
     edges = get(f'/api/markets/{oid}/edges')
     grid = edges['edge_grid']
     atm = grid['atm_strike_usd']
     near = min(grid['strikes'], key=lambda s: abs(s['strike_usd'] - atm))
     dens = fetch_density(oid)
-    return oid, edges['oracle'], near, cal, dens
+    vault = fetch_vault_health()
+    return oid, edges['oracle'], near, cal, dens, vault
 
 def bucket_for(cal, prob):
     for b in cal['buckets']:
@@ -243,7 +263,7 @@ def strategist(oracle, near, cal, dens=None):
     return claude_json(sys_p, chr(10).join(u))
 
 # ---- Agent 2: Risk Officer ----
-def risk_officer(proposal, oracle, near, cal, dens=None):
+def risk_officer(proposal, oracle, near, cal, dens=None, vault=None):
     fair_up = near['up']['fair']
     b = bucket_for(cal, fair_up)
     sys_p = ('You are the RISK OFFICER for a DeepBook Predict trading agent. '
@@ -259,6 +279,8 @@ def risk_officer(proposal, oracle, near, cal, dens=None):
         u.append(f"this bucket {b['bucket_low']:.2f}-{b['bucket_high']:.2f}: implied {b['avg_implied_prob']:.3f} actual {b['actual_win_rate']:.3f} gap {b['calibration_gap']:.3f} roi {b['avg_roi']:.3f}")
     if dens and dens.get("prob_up") is not None:
         u.append(f"INDEPENDENT CROSS-CHECK -- risk-neutral density (Breeden-Litzenberger): density-implied P(up) {dens['prob_up']:.4f} vs model fair P(up) {fair_up:.4f}; 90% settlement range ${dens['p05_usd']:,.0f}-${dens['p95_usd']:,.0f}. If the density-implied P(up) diverges materially from the model fair, or the strike sits in the tail of the density, treat the claimed edge with extra suspicion.")
+    if vault and vault.get("grade"):
+        u.append(f"VAULT SOLVENCY (the PLP vault underwrites this position): grade {vault['grade']}, max-payout utilization {vault['max_payout_utilization']*100:.0f}%, breach headroom {vault['breach_headroom_pct']:.0f}%. If the vault is AMBER or RED, be more conservative: a stressed counterparty is a reason to cut size or veto even when the edge looks acceptable.")
     u.append(f"limits: per-bet cap {PER_BET_CAP}, budget {TOTAL_BUDGET}.")
     u.append('Review. JSON:')
     u.append('{"approved":true|false,"adjusted_size":<int micro-DUSDC, 0 if vetoed>,"calibration_adjusted_prob":<0..1>,"verdict":"<reasoning, 2-3 sentences>"}')
@@ -306,21 +328,22 @@ def run_cycle_json():
     result = {"ok": False, "steps": steps}
     try:
         # 1. observe
-        oid, oracle, near, cal, dens = observe(None)
+        oid, oracle, near, cal, dens, vault = observe(None)
         steps.append({"stage": "observe", "status": "done",
             "market": {"asset": oracle["underlying_asset"],
                        "expiry": oracle["expiry_iso"],
                        "strike_usd": near["strike_usd"],
                        "oracle_id": oid},
             "fair": {"up": near["up"]["fair"], "down": near["down"]["fair"]},
-            "density": dens})
+            "density": dens,
+            "vault_health": vault})
 
         # 2. strategist
         prop = strategist(oracle, near, cal, dens)
         steps.append({"stage": "strategist", "status": "done", "proposal": prop})
 
         # 3. risk officer
-        review = risk_officer(prop, oracle, near, cal, dens)
+        review = risk_officer(prop, oracle, near, cal, dens, vault)
         steps.append({"stage": "risk_officer", "status": "done", "review": review})
 
         approved = bool(review.get("approved"))
@@ -399,7 +422,7 @@ def _main_human():
     oid_arg = sys.argv[1] if len(sys.argv) > 1 else None
 
     print('== 1. OBSERVE ==')
-    oid, oracle, near, cal, dens = observe(oid_arg)
+    oid, oracle, near, cal, dens, vault = observe(oid_arg)
     print(f"  {oracle['underlying_asset']} {oracle['expiry_iso']} strike {near['strike_usd']}")
 
     print('== 2. STRATEGIST proposes ==')
@@ -407,7 +430,7 @@ def _main_human():
     print('  ' + json.dumps(prop, ensure_ascii=False))
 
     print('== 3. RISK OFFICER reviews ==')
-    review = risk_officer(prop, oracle, near, cal, dens)
+    review = risk_officer(prop, oracle, near, cal, dens, vault)
     print('  ' + json.dumps(review, ensure_ascii=False))
 
     approved = bool(review.get('approved'))
