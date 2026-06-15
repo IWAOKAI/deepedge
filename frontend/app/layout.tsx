@@ -54,39 +54,29 @@ export default function RootLayout({
               <Link href="/" style={{ color: "var(--text)", textDecoration: "none" }}>
                 Markets
               </Link>
-              <Link
-                href="/overview"
-                style={{ color: "var(--text)", textDecoration: "none" }}
-              >
+              <Link href="/overview" style={{ color: "var(--text)", textDecoration: "none" }}>
                 Overview
               </Link>
-              <Link
-                href="/insights"
-                style={{ color: "var(--text)", textDecoration: "none" }}
-              >
+              <Link href="/insights" style={{ color: "var(--text)", textDecoration: "none" }}>
                 Insights
-              </Link>
-              <Link
-                href="/portfolio"
-                style={{ color: "var(--text)", textDecoration: "none" }}
-              >
-                Portfolio
-              </Link>
-              <Link
-                href="/agent"
-                style={{ color: "var(--text)", textDecoration: "none" }}
-              >
-                AI Agent
-              </Link>
-          <Link href="/ledger">Ledger</Link>
-              <Link href="/vault" style={{ color: "var(--text)", textDecoration: "none" }}>
-                Vault
               </Link>
               <Link href="/density" style={{ color: "var(--text)", textDecoration: "none" }}>
                 Density
               </Link>
+              <Link href="/vault" style={{ color: "var(--text)", textDecoration: "none" }}>
+                Vault
+              </Link>
               <Link href="/cross-venue" style={{ color: "var(--text)", textDecoration: "none" }}>
                 Cross-Venue
+              </Link>
+              <Link href="/portfolio" style={{ color: "var(--text)", textDecoration: "none" }}>
+                Portfolio
+              </Link>
+              <Link href="/agent" style={{ color: "var(--text)", textDecoration: "none" }}>
+                AI Agent
+              </Link>
+              <Link href="/ledger" style={{ color: "var(--text)", textDecoration: "none" }}>
+                Ledger
               </Link>
             </nav>
           </div>
