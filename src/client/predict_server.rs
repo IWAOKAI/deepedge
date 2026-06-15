@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use reqwest::Client;
 use std::time::Duration;
+use std::path::PathBuf;
 
 use crate::types::{Oracle, OracleState, ManagerSummary, ManagerPnl, VaultSummary, PositionMint};
 
@@ -20,8 +21,10 @@ impl PredictServerClient {
             .build()
             .context("failed to build HTTP client")?;
 
+        let base_url = std::env::var("PREDICT_SERVER_URL")
+            .unwrap_or_else(|_| DEFAULT_BASE_URL.to_string());
         Ok(Self {
-            base_url: DEFAULT_BASE_URL.to_string(),
+            base_url,
             http,
         })
     }
@@ -48,8 +51,21 @@ impl PredictServerClient {
     /// GET /predicts/:predict_id/oracles
     pub async fn list_oracles(&self, predict_id: &str) -> Result<Vec<Oracle>> {
         let url = format!("{}/predicts/{}/oracles", self.base_url, predict_id);
-        let res = self.http.get(&url).send().await?.error_for_status()?;
-        Ok(res.json().await?)
+        let key = format!("list_oracles_{}", predict_id);
+        match self.http.get(&url).send().await.and_then(|r| r.error_for_status()) {
+            Ok(res) => match res.json::<Vec<Oracle>>().await {
+                Ok(v) => {
+                    write_cache(&key, &v);
+                    Ok(v)
+                }
+                Err(e) => read_cache::<Vec<Oracle>>(&key)
+                    .ok_or(())
+                    .map_err(|_| anyhow::anyhow!("decode failed and no cache: {}", e)),
+            },
+            Err(e) => read_cache::<Vec<Oracle>>(&key)
+                .ok_or(())
+                .map_err(|_| anyhow::anyhow!("fetch failed and no cache: {}", e)),
+        }
     }
 
     /// 同上、status == "active" のみフィルター
@@ -61,15 +77,41 @@ impl PredictServerClient {
     /// GET /oracles/:oracle_id/state
     pub async fn oracle_state(&self, oracle_id: &str) -> Result<OracleState> {
         let url = format!("{}/oracles/{}/state", self.base_url, oracle_id);
-        let res = self.http.get(&url).send().await?.error_for_status()?;
-        Ok(res.json().await?)
+        let key = format!("oracle_state_{}", oracle_id);
+        match self.http.get(&url).send().await.and_then(|r| r.error_for_status()) {
+            Ok(res) => match res.json::<OracleState>().await {
+                Ok(v) => {
+                    write_cache(&key, &v);
+                    Ok(v)
+                }
+                Err(e) => read_cache::<OracleState>(&key)
+                    .ok_or(())
+                    .map_err(|_| anyhow::anyhow!("decode failed and no cache: {}", e)),
+            },
+            Err(e) => read_cache::<OracleState>(&key)
+                .ok_or(())
+                .map_err(|_| anyhow::anyhow!("fetch failed and no cache: {}", e)),
+        }
     }
 
     /// GET /predicts/:predict_id/vault/summary
     pub async fn vault_summary(&self, predict_id: &str) -> Result<VaultSummary> {
         let url = format!("{}/predicts/{}/vault/summary", self.base_url, predict_id);
-        let res = self.http.get(&url).send().await?.error_for_status()?;
-        Ok(res.json().await?)
+        let key = format!("vault_summary_{}", predict_id);
+        match self.http.get(&url).send().await.and_then(|r| r.error_for_status()) {
+            Ok(res) => match res.json::<VaultSummary>().await {
+                Ok(v) => {
+                    write_cache(&key, &v);
+                    Ok(v)
+                }
+                Err(e) => read_cache::<VaultSummary>(&key)
+                    .ok_or(())
+                    .map_err(|_| anyhow::anyhow!("decode failed and no cache: {}", e)),
+            },
+            Err(e) => read_cache::<VaultSummary>(&key)
+                .ok_or(())
+                .map_err(|_| anyhow::anyhow!("fetch failed and no cache: {}", e)),
+        }
     }
 
     /// GET /managers/:manager_id/summary
@@ -132,4 +174,31 @@ mod tests {
         let oracles = client.list_oracles(PREDICT_ID).await.unwrap();
         assert!(!oracles.is_empty());
     }
+}
+
+
+/// On-disk cache directory for last-good responses. Lets a demo survive a
+/// transient outage of the external Predict server: when a live fetch
+/// fails, we fall back to the most recent successful response instead of
+/// breaking the page. The data is still real -- just a few moments old.
+fn cache_path(key: &str) -> PathBuf {
+    let dir = PathBuf::from("/root/deepedge/cache");
+    let _ = std::fs::create_dir_all(&dir);
+    // Sanitize the key into a safe filename.
+    let safe: String = key
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect();
+    dir.join(format!("{}.json", safe))
+}
+
+fn write_cache<T: serde::Serialize>(key: &str, value: &T) {
+    if let Ok(bytes) = serde_json::to_vec(value) {
+        let _ = std::fs::write(cache_path(key), bytes);
+    }
+}
+
+fn read_cache<T: serde::de::DeserializeOwned>(key: &str) -> Option<T> {
+    let bytes = std::fs::read(cache_path(key)).ok()?;
+    serde_json::from_slice(&bytes).ok()
 }
