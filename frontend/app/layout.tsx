@@ -85,6 +85,9 @@ export default function RootLayout({
               <Link href="/density" style={{ color: "var(--text)", textDecoration: "none" }}>
                 Density
               </Link>
+              <Link href="/cross-venue" style={{ color: "var(--text)", textDecoration: "none" }}>
+                Cross-Venue
+              </Link>
             </nav>
           </div>
         </header>

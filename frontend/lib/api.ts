@@ -253,6 +253,8 @@ export const api = {
     getJson<VaultHealthResponse>(`/api/vault/health`),
   density: (oracleId: string): Promise<DensityResponse> =>
     getJson<DensityResponse>(`/api/markets/${oracleId}/density`),
+  crossVenue: (): Promise<CrossVenueResponse> =>
+    getJson<CrossVenueResponse>(`/api/cross-venue`),
 };
 
 
@@ -302,4 +304,17 @@ export interface DensityGrid {
 export interface DensityResponse {
   oracle: MarketSummary;
   grid: DensityGrid | null;
+}
+
+
+export interface CrossVenueResponse {
+  deribit_dvol: number | null;
+  binance_realized_vol: number | null;
+  realized_window_days: number;
+  vol_risk_premium: number | null;
+  btc_index_price: number | null;
+  predict_atm_iv: number | null;
+  predict_tenor_days: number | null;
+  predict_vs_deribit: number | null;
+  predict_richness: string | null;
 }
