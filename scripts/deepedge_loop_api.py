@@ -157,6 +157,26 @@ def claude_json(system, user, max_tokens=600, retries=2):
     raise ValueError(f"claude_json failed after {retries + 1} attempts: {last_err}")
 
 # ---- observe ----
+def fetch_cross_venue():
+    """Fetch the cross-venue vol reference: Deribit DVOL, Binance realized
+    vol, the vol-risk-premium, and how Predict's ATM IV compares. If Predict
+    is far out of line with the rest of the market, that is a sign the
+    on-chain surface may be mispriced. Returns None on failure."""
+    try:
+        d = get('/api/cross-venue')
+        if not d:
+            return None
+        return {
+            "deribit_dvol": d.get("deribit_dvol"),
+            "binance_realized_vol": d.get("binance_realized_vol"),
+            "vol_risk_premium": d.get("vol_risk_premium"),
+            "predict_atm_iv": d.get("predict_atm_iv"),
+            "predict_vs_deribit": d.get("predict_vs_deribit"),
+            "predict_richness": d.get("predict_richness"),
+        }
+    except Exception:
+        return None
+
 def fetch_vault_health():
     """Fetch the PLP vault's solvency grade. The vault underwrites every
     position, so a stressed vault is a reason for the Risk Officer to be
@@ -230,14 +250,16 @@ def observe(oid=None):
         sel_oid = best['oracle']['oracle_id'] if 'oracle_id' in best['oracle'] else actives[0]['oracle_id']
         dens = fetch_density(sel_oid)
         vault = fetch_vault_health()
-        return sel_oid, best['oracle'], best_near, cal, dens, vault
+        xv = fetch_cross_venue()
+        return sel_oid, best['oracle'], best_near, cal, dens, vault, xv
     edges = get(f'/api/markets/{oid}/edges')
     grid = edges['edge_grid']
     atm = grid['atm_strike_usd']
     near = min(grid['strikes'], key=lambda s: abs(s['strike_usd'] - atm))
     dens = fetch_density(oid)
     vault = fetch_vault_health()
-    return oid, edges['oracle'], near, cal, dens, vault
+    xv = fetch_cross_venue()
+    return oid, edges['oracle'], near, cal, dens, vault, xv
 
 def bucket_for(cal, prob):
     for b in cal['buckets']:
@@ -263,7 +285,7 @@ def strategist(oracle, near, cal, dens=None):
     return claude_json(sys_p, chr(10).join(u))
 
 # ---- Agent 2: Risk Officer ----
-def risk_officer(proposal, oracle, near, cal, dens=None, vault=None):
+def risk_officer(proposal, oracle, near, cal, dens=None, vault=None, xv=None):
     fair_up = near['up']['fair']
     b = bucket_for(cal, fair_up)
     sys_p = ('You are the RISK OFFICER for a DeepBook Predict trading agent. '
@@ -281,6 +303,11 @@ def risk_officer(proposal, oracle, near, cal, dens=None, vault=None):
         u.append(f"INDEPENDENT CROSS-CHECK -- risk-neutral density (Breeden-Litzenberger): density-implied P(up) {dens['prob_up']:.4f} vs model fair P(up) {fair_up:.4f}; 90% settlement range ${dens['p05_usd']:,.0f}-${dens['p95_usd']:,.0f}. If the density-implied P(up) diverges materially from the model fair, or the strike sits in the tail of the density, treat the claimed edge with extra suspicion.")
     if vault and vault.get("grade"):
         u.append(f"VAULT SOLVENCY (the PLP vault underwrites this position): grade {vault['grade']}, max-payout utilization {vault['max_payout_utilization']*100:.0f}%, breach headroom {vault['breach_headroom_pct']:.0f}%. If the vault is AMBER or RED, be more conservative: a stressed counterparty is a reason to cut size or veto even when the edge looks acceptable.")
+    if xv and xv.get("predict_richness"):
+        dvol = xv.get("deribit_dvol")
+        piv = xv.get("predict_atm_iv")
+        vrp = xv.get("vol_risk_premium")
+        u.append(f"CROSS-VENUE VOL CHECK: Predict ATM IV {piv:.0f}% vs Deribit DVOL {dvol:.0f}% -> Predict is {xv['predict_richness']}. Vol-risk-premium (Deribit implied - Binance realized) {vrp:+.0f}%. If Predict is far 'rich' or 'cheap' versus Deribit, the on-chain surface may be mispriced and the model's fair value less trustworthy; weigh that in the risk decision." if (dvol and piv and vrp is not None) else "")
     u.append(f"limits: per-bet cap {PER_BET_CAP}, budget {TOTAL_BUDGET}.")
     u.append('Review. JSON:')
     u.append('{"approved":true|false,"adjusted_size":<int micro-DUSDC, 0 if vetoed>,"calibration_adjusted_prob":<0..1>,"verdict":"<reasoning, 2-3 sentences>"}')
@@ -328,7 +355,7 @@ def run_cycle_json():
     result = {"ok": False, "steps": steps}
     try:
         # 1. observe
-        oid, oracle, near, cal, dens, vault = observe(None)
+        oid, oracle, near, cal, dens, vault, xv = observe(None)
         steps.append({"stage": "observe", "status": "done",
             "market": {"asset": oracle["underlying_asset"],
                        "expiry": oracle["expiry_iso"],
@@ -336,14 +363,15 @@ def run_cycle_json():
                        "oracle_id": oid},
             "fair": {"up": near["up"]["fair"], "down": near["down"]["fair"]},
             "density": dens,
-            "vault_health": vault})
+            "vault_health": vault,
+            "cross_venue": xv})
 
         # 2. strategist
         prop = strategist(oracle, near, cal, dens)
         steps.append({"stage": "strategist", "status": "done", "proposal": prop})
 
         # 3. risk officer
-        review = risk_officer(prop, oracle, near, cal, dens, vault)
+        review = risk_officer(prop, oracle, near, cal, dens, vault, xv)
         steps.append({"stage": "risk_officer", "status": "done", "review": review})
 
         approved = bool(review.get("approved"))
@@ -422,7 +450,7 @@ def _main_human():
     oid_arg = sys.argv[1] if len(sys.argv) > 1 else None
 
     print('== 1. OBSERVE ==')
-    oid, oracle, near, cal, dens, vault = observe(oid_arg)
+    oid, oracle, near, cal, dens, vault, xv = observe(oid_arg)
     print(f"  {oracle['underlying_asset']} {oracle['expiry_iso']} strike {near['strike_usd']}")
 
     print('== 2. STRATEGIST proposes ==')
@@ -430,7 +458,7 @@ def _main_human():
     print('  ' + json.dumps(prop, ensure_ascii=False))
 
     print('== 3. RISK OFFICER reviews ==')
-    review = risk_officer(prop, oracle, near, cal, dens, vault)
+    review = risk_officer(prop, oracle, near, cal, dens, vault, xv)
     print('  ' + json.dumps(review, ensure_ascii=False))
 
     approved = bool(review.get('approved'))
