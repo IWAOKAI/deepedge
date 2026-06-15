@@ -112,6 +112,7 @@ def get(path):
         return json.load(r)
 
 def claude(system, user, max_tokens=600):
+    """Call Claude and return the raw text. Bare call, no JSON parsing."""
     body = json.dumps({
         'model': MODEL, 'max_tokens': max_tokens,
         'system': system,
@@ -124,7 +125,57 @@ def claude(system, user, max_tokens=600):
         txt = json.load(r)['content'][0]['text']
     return txt.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
 
+
+def claude_json(system, user, max_tokens=600, retries=2):
+    """Call Claude expecting a JSON object back, and parse it robustly.
+
+    LLMs occasionally return an empty completion, a prose preamble, or a
+    truncated response, any of which break a naive json.loads. We strip
+    fences, slice out the outermost {...} object, and retry a couple of
+    times before giving up. This keeps a single flaky completion from
+    aborting an entire decision cycle."""
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            txt = claude(system, user, max_tokens)
+            if not txt:
+                raise ValueError("empty completion")
+            # Try direct parse first.
+            try:
+                return json.loads(txt)
+            except json.JSONDecodeError:
+                pass
+            # Slice the outermost JSON object and parse that.
+            start = txt.find("{")
+            end = txt.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                return json.loads(txt[start:end + 1])
+            raise ValueError("no JSON object in completion: " + txt[:80])
+        except Exception as e:
+            last_err = e
+            continue
+    raise ValueError(f"claude_json failed after {retries + 1} attempts: {last_err}")
+
 # ---- observe ----
+def fetch_density(oid):
+    """Fetch the Breeden-Litzenberger risk-neutral density summary for a
+    market: the most-likely settlement (mode), the density-implied P(up),
+    and the 90% range. Returns None if unavailable so the agents degrade
+    gracefully."""
+    try:
+        d = get(f'/api/markets/{oid}/density')
+        g = d.get('grid')
+        if not g:
+            return None
+        return {
+            "mode_usd": g.get("mode_usd"),
+            "prob_up": g.get("prob_up"),
+            "p05_usd": g.get("p05_usd"),
+            "p95_usd": g.get("p95_usd"),
+        }
+    except Exception:
+        return None
+
 def observe(oid=None):
     cal = get('/api/backtest/calibration')
     if oid is None:
@@ -158,12 +209,15 @@ def observe(oid=None):
                 continue
         if best is None:
             sys.exit('No market with usable edges')
-        return best['oracle']['oracle_id'] if 'oracle_id' in best['oracle'] else actives[0]['oracle_id'], best['oracle'], best_near, cal
+        sel_oid = best['oracle']['oracle_id'] if 'oracle_id' in best['oracle'] else actives[0]['oracle_id']
+        dens = fetch_density(sel_oid)
+        return sel_oid, best['oracle'], best_near, cal, dens
     edges = get(f'/api/markets/{oid}/edges')
     grid = edges['edge_grid']
     atm = grid['atm_strike_usd']
     near = min(grid['strikes'], key=lambda s: abs(s['strike_usd'] - atm))
-    return oid, edges['oracle'], near, cal
+    dens = fetch_density(oid)
+    return oid, edges['oracle'], near, cal, dens
 
 def bucket_for(cal, prob):
     for b in cal['buckets']:
@@ -172,7 +226,7 @@ def bucket_for(cal, prob):
     return None
 
 # ---- Agent 1: Strategist ----
-def strategist(oracle, near, cal):
+def strategist(oracle, near, cal, dens=None):
     fair_up = near['up']['fair']
     fair_down = near['down']['fair']
     sys_p = ('You are the STRATEGIST for a DeepBook Predict trading agent. '
@@ -181,13 +235,15 @@ def strategist(oracle, near, cal):
     u = []
     u.append(f"Market {oracle['underlying_asset']} expiry {oracle['expiry_iso']}")
     u.append(f"strike {near['strike_usd']}, model fair P(up) {fair_up:.4f}, P(down) {fair_down:.4f}")
+    if dens and dens.get("prob_up") is not None:
+        u.append(f"Risk-neutral density (Breeden-Litzenberger from the SVI smile): most-likely settlement ${dens['mode_usd']:,.0f}, density-implied P(up) {dens['prob_up']:.4f}, 90% range ${dens['p05_usd']:,.0f}-${dens['p95_usd']:,.0f}. Check whether the strike sits inside this range and whether density P(up) agrees with the model fair P(up).")
     u.append(f"per-bet cap {PER_BET_CAP} (1e6=1 DUSDC), budget {TOTAL_BUDGET}.")
     u.append('Propose a bet. JSON:')
     u.append('{"action":"BET_UP|BET_DOWN|NO_BET","size":<int micro-DUSDC <= cap>,"thesis":"<why, 2 sentences>"}')
-    return json.loads(claude(sys_p, chr(10).join(u)))
+    return claude_json(sys_p, chr(10).join(u))
 
 # ---- Agent 2: Risk Officer ----
-def risk_officer(proposal, oracle, near, cal):
+def risk_officer(proposal, oracle, near, cal, dens=None):
     fair_up = near['up']['fair']
     b = bucket_for(cal, fair_up)
     sys_p = ('You are the RISK OFFICER for a DeepBook Predict trading agent. '
@@ -201,10 +257,12 @@ def risk_officer(proposal, oracle, near, cal):
     u.append(f"CALIBRATION overall: implied {cal['overall_avg_implied']:.3f} vs actual {cal['overall_win_rate']:.3f}, ROI {cal['overall_avg_roi']:.3f}")
     if b:
         u.append(f"this bucket {b['bucket_low']:.2f}-{b['bucket_high']:.2f}: implied {b['avg_implied_prob']:.3f} actual {b['actual_win_rate']:.3f} gap {b['calibration_gap']:.3f} roi {b['avg_roi']:.3f}")
+    if dens and dens.get("prob_up") is not None:
+        u.append(f"INDEPENDENT CROSS-CHECK -- risk-neutral density (Breeden-Litzenberger): density-implied P(up) {dens['prob_up']:.4f} vs model fair P(up) {fair_up:.4f}; 90% settlement range ${dens['p05_usd']:,.0f}-${dens['p95_usd']:,.0f}. If the density-implied P(up) diverges materially from the model fair, or the strike sits in the tail of the density, treat the claimed edge with extra suspicion.")
     u.append(f"limits: per-bet cap {PER_BET_CAP}, budget {TOTAL_BUDGET}.")
     u.append('Review. JSON:')
     u.append('{"approved":true|false,"adjusted_size":<int micro-DUSDC, 0 if vetoed>,"calibration_adjusted_prob":<0..1>,"verdict":"<reasoning, 2-3 sentences>"}')
-    return json.loads(claude(sys_p, chr(10).join(u)))
+    return claude_json(sys_p, chr(10).join(u))
 
 # ---- Walrus + verify ----
 def store_walrus(b):
@@ -248,20 +306,21 @@ def run_cycle_json():
     result = {"ok": False, "steps": steps}
     try:
         # 1. observe
-        oid, oracle, near, cal = observe(None)
+        oid, oracle, near, cal, dens = observe(None)
         steps.append({"stage": "observe", "status": "done",
             "market": {"asset": oracle["underlying_asset"],
                        "expiry": oracle["expiry_iso"],
                        "strike_usd": near["strike_usd"],
                        "oracle_id": oid},
-            "fair": {"up": near["up"]["fair"], "down": near["down"]["fair"]}})
+            "fair": {"up": near["up"]["fair"], "down": near["down"]["fair"]},
+            "density": dens})
 
         # 2. strategist
-        prop = strategist(oracle, near, cal)
+        prop = strategist(oracle, near, cal, dens)
         steps.append({"stage": "strategist", "status": "done", "proposal": prop})
 
         # 3. risk officer
-        review = risk_officer(prop, oracle, near, cal)
+        review = risk_officer(prop, oracle, near, cal, dens)
         steps.append({"stage": "risk_officer", "status": "done", "review": review})
 
         approved = bool(review.get("approved"))
@@ -340,15 +399,15 @@ def _main_human():
     oid_arg = sys.argv[1] if len(sys.argv) > 1 else None
 
     print('== 1. OBSERVE ==')
-    oid, oracle, near, cal = observe(oid_arg)
+    oid, oracle, near, cal, dens = observe(oid_arg)
     print(f"  {oracle['underlying_asset']} {oracle['expiry_iso']} strike {near['strike_usd']}")
 
     print('== 2. STRATEGIST proposes ==')
-    prop = strategist(oracle, near, cal)
+    prop = strategist(oracle, near, cal, dens)
     print('  ' + json.dumps(prop, ensure_ascii=False))
 
     print('== 3. RISK OFFICER reviews ==')
-    review = risk_officer(prop, oracle, near, cal)
+    review = risk_officer(prop, oracle, near, cal, dens)
     print('  ' + json.dumps(review, ensure_ascii=False))
 
     approved = bool(review.get('approved'))
