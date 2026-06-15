@@ -30,6 +30,7 @@ takes the opposite stance: every layer is constrained and checkable.
 |---|---|---|
 | Places real on-chain trades | yes | yes |
 | Prices against an on-chain SVI/IV surface | yes | yes |
+| **Desk-grade analytics (density, vault grade, cross-venue)** | rarely | **yes -- Breeden-Litzenberger density, PLP solvency grade, Deribit/Binance vol** |
 | **A second agent that can veto the first** | no | **yes -- Risk Officer, using calibration** |
 | **On-chain spending limit it cannot bypass** | no | **yes -- hot-potato Mandate** |
 | **Formally verified the limit holds for all inputs** | no | **yes -- Sui Prover** |
@@ -54,6 +55,7 @@ DeepEdge sits on top of DeepBook Predict and turns its on-chain volatility surfa
 - **Market calibration, measured.** A backtest over 831 settled bets shows exactly where the market is reliable and where it is systematically mispriced (details below).
 - **One-tap betting.** Connect a wallet, see the fair value, confirm, and place a real on-chain bet — deposit DUSDC into your PredictManager and mint a position, all from the market page.
 - **Your positions, tracked.** Every bet you place, with fill price, cost, and realized P&L, read straight from on-chain data.
+- **Desk-grade reads on the surface.** The risk-neutral density the surface implies (Breeden-Litzenberger), the PLP vault's GREEN/AMBER/RED solvency grade, and a cross-venue vol comparison against Deribit DVOL and Binance realized vol — each one also wired into the agent's risk check, not just shown (details below).
 
 ---
 
@@ -115,6 +117,24 @@ claiming perfection: on the current testnet the butterfly checks pass, while
 the calendar check flags a handful of maturity pairs where the on-chain
 surfaces aren't strictly monotone. We surface the violation count instead of
 hiding it.
+
+## Reading the market like a desk would
+
+A raw SVI parameter set or a vault balance tells you nothing on its own. DeepEdge turns each into a single clear read, and -- unlike a read-only terminal -- feeds every one of them to the agent's Risk Officer as an input to the decision.
+
+### Risk-neutral density (Breeden-Litzenberger)
+
+From the SVI smile, DeepEdge computes the probability distribution the surface prices for where BTC settles, via Breeden-Litzenberger. The density reuses the *same* butterfly function g(k) used for the arbitrage check, so a surface that is butterfly-arbitrage-free is exactly one whose implied density is non-negative -- the analytic and the safety check are one object. Three unit tests verify the density is non-negative, integrates to ~1, and has a finite mode. The Density screen plots the distribution with the mode, P(up), and 90% range; the agent's two reviewers cross-check this density's P(up) against the model's fair value before any bet.
+
+### Vault solvency grade
+
+The PLP vault is the counterparty to every position, so its solvency is the market's solvency. DeepEdge grades it GREEN / AMBER / RED from its live on-chain reserves and exposure -- worst-case payout coverage (breach headroom), max-payout utilization, and exit liquidity -- with the numbers that justify the grade and unit tests for the boundaries. The Risk Officer is told to get more conservative when the vault is stressed: a strained counterparty is a reason to cut size or veto even when the edge looks fine.
+
+### Cross-venue volatility
+
+On-chain implied vol means little in isolation. DeepEdge frames Predict's ATM IV against Deribit's DVOL index and Binance's realized vol (an implied-vs-implied comparison at the tenor nearest 30 days), and computes the volatility risk premium -- Deribit implied minus Binance realized -- the spread that tells an LP whether selling vol carries an edge. If Predict drifts far rich or cheap versus Deribit, the Risk Officer treats the on-chain surface as suspect. References are pulled live; each leg degrades gracefully if a venue is unreachable.
+
+Together these give the agent four independent signals -- historical calibration, the risk-neutral density, vault solvency, and the cross-venue vol comparison -- and every one of them is stored on Walrus and auditable in the ledger.
 
 ## The verifiable AI agent (built and working)
 
@@ -258,7 +278,7 @@ git-ignored.
 
 ---
 
-## Seven screens
+## Ten screens
 
 - **Markets** — every live BTC oracle, sorted by expiry, with "closing soon" flags.
 - **Overview** — DeepEdge fair value across all live markets in one table; the whole board at a glance.
@@ -267,6 +287,9 @@ git-ignored.
 - **Portfolio** — your on-chain betting history, account value, and realized P&L.
 - **AI Agent** — the verifiable autonomous loop, live: press *Run one cycle* and watch the Strategist propose, the Risk Officer veto, the decision land on Walrus, the hash verify, and the Mandate enforce — all on-chain.
 - **Ledger** — the agent's entire decision history, auditable: every cycle (bet, veto, or no-bet) with both agents' reasoning, its Walrus blob and SHA-256, and a *Verify hash* button that re-fetches the blob and re-checks the hash in your browser. A trading bot says "trust me"; this page says "check me".
+- **Vault** — the PLP vault's solvency grade (GREEN / AMBER / RED) with worst-case payout coverage, utilization, and exit liquidity; the same read the Risk Officer uses.
+- **Density** — the risk-neutral distribution the SVI surface prices, plotted, with mode, P(up), and 90% range; the same g(k) as the arbitrage check.
+- **Cross-Venue** — Predict's ATM IV against Deribit DVOL and Binance realized vol, with the rich/cheap verdict and the volatility risk premium.
 
 **Overview** — fair value across every live market:
 
