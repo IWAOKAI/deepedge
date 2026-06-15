@@ -10,3 +10,10 @@ move/Published.toml.bak
 # Telegram bot credentials (never commit)
 .telegram_env
 /root/.telegram_env
+
+# Runtime cache, logs, stray files
+cache/
+__pycache__/
+*.log
+sui-prover.log*
+None,
