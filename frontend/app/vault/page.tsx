@@ -25,10 +25,11 @@ export default function VaultPage() {
     <div style={{ maxWidth: 860, margin: "0 auto", padding: "32px 20px" }}>
       <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, color: "var(--text)" }}>Vault</h1>
       <p style={{ color: "var(--muted)", marginTop: 8, lineHeight: 1.6, maxWidth: 620 }}>
-        The PLP vault is the counterparty to every position on this market, so its
-        solvency is the market&apos;s solvency. This is the single read an LP needs:
-        can the vault cover its worst case, how much is committed, and can LPs exit.
-        The same grade is an input the agent&apos;s Risk Officer reads before sizing any bet.
+        Every bet on this market is backed by a shared vault — if it can&apos;t pay out, the
+        market breaks. This is the one number that matters: is the vault healthy? It checks
+        whether the vault can cover its worst-case payout, how much is already at risk, and
+        whether funds can be withdrawn. The AI&apos;s Risk Officer reads this same grade before
+        sizing any bet — a stressed vault means it bets smaller, or not at all.
       </p>
 
       {error && (

@@ -43,11 +43,12 @@ export default function DensityPage() {
         Risk-Neutral Density
       </h1>
       <p style={{ color: "var(--muted)", marginTop: 8, lineHeight: 1.6, maxWidth: 640 }}>
-        The probability distribution the SVI surface implies for where BTC settles, via
-        Breeden-Litzenberger. It reuses the same butterfly function g(k) as the arbitrage
-        check — so an arbitrage-free surface is exactly one whose density is non-negative.
-        The agent&apos;s two reviewers read this density before any bet, cross-checking its
-        P(up) against the model&apos;s fair value.
+        Where does the market think BTC will actually land at expiry? This curve shows the
+        full range of outcomes the market is pricing — the peak is the most likely price,
+        the shaded band is the 90% range. It&apos;s derived from the volatility surface using a
+        standard options-pricing method (Breeden-Litzenberger), and it doubles as a safety
+        check: a healthy curve never dips below zero. The AI&apos;s two reviewers compare this
+        against their own estimate before approving any bet.
       </p>
 
       {markets.length > 0 && (
@@ -100,10 +101,10 @@ export default function DensityPage() {
             </div>
 
             <p style={{ marginTop: 20, fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
-              Computed in Rust from the oracle&apos;s live SVI parameters, normalized numerically.
-              Tenor: {(g.seconds_until_expiry / 86400).toFixed(0)} days. This is the same density the
-              Strategist and Risk Officer weigh against the model&apos;s fair value — analytics that
-              feed an accountable, auditable decision, not just a chart.
+              Built live from this market&apos;s on-chain volatility data — nothing mocked.
+              {(g.seconds_until_expiry / 86400).toFixed(0)} days to expiry. The same curve the AI&apos;s
+              Strategist and Risk Officer weigh before any bet — analysis that drives an
+              accountable, checkable decision, not just a chart.
             </p>
           </>
         );

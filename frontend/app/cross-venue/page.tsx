@@ -25,10 +25,11 @@ export default function CrossVenuePage() {
     <div style={{ maxWidth: 860, margin: "0 auto", padding: "32px 20px" }}>
       <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, color: "var(--text)" }}>Cross-Venue</h1>
       <p style={{ color: "var(--muted)", marginTop: 8, lineHeight: 1.6, maxWidth: 640 }}>
-        On-chain implied vol means little in isolation. This frames Predict&apos;s ATM IV against
-        Deribit&apos;s DVOL index and Binance&apos;s realized vol — telling you whether Predict is rich
-        or cheap, and whether selling vol carries an edge. If Predict drifts far from the rest of
-        the market, the Risk Officer treats the on-chain surface as suspect.
+        Is this on-chain market&apos;s pricing in line with the rest of the world? We compare its
+        expected volatility against two of the largest crypto venues — Deribit (the main
+        options exchange) and Binance (actual realized moves). If the on-chain price drifts
+        far from these, something may be mispriced, and the AI&apos;s Risk Officer treats the
+        market with extra caution.
       </p>
 
       {error && (
