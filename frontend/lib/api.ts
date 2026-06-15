@@ -249,4 +249,57 @@ export const api = {
   agentLedger: () => getJson<LedgerResponse>("/api/agent/ledger"),
   surfaceHealth: (oracleId: string) => getJson<SurfaceHealthResponse>(`/api/markets/${oracleId}/surface-health`),
   calendarHealth: () => getJson<CalendarHealth>("/api/surface/calendar-health"),
+  vaultHealth: (): Promise<VaultHealthResponse> =>
+    getJson<VaultHealthResponse>(`/api/vault/health`),
+  density: (oracleId: string): Promise<DensityResponse> =>
+    getJson<DensityResponse>(`/api/markets/${oracleId}/density`),
 };
+
+
+export interface VaultHealth {
+  grade: string;
+  vault_value_usd: number;
+  max_payout_usd: number;
+  total_mtm_usd: number;
+  max_payout_utilization: number;
+  utilization: number;
+  breach_headroom_pct: number;
+  available_withdrawal_usd: number;
+  withdrawal_headroom_pct: number;
+  reasons: string[];
+}
+
+export interface VaultSummaryData {
+  vault_value: number;
+  total_max_payout: number;
+  plp_total_supply: number;
+  plp_share_price: number;
+}
+
+export interface VaultHealthResponse {
+  vault: VaultSummaryData;
+  health: VaultHealth;
+}
+
+
+export interface DensityPoint {
+  strike_usd: number;
+  log_moneyness: number;
+  density: number;
+}
+
+export interface DensityGrid {
+  spot_usd: number;
+  forward_usd: number;
+  seconds_until_expiry: number;
+  mode_usd: number;
+  prob_up: number;
+  p05_usd: number;
+  p95_usd: number;
+  points: DensityPoint[];
+}
+
+export interface DensityResponse {
+  oracle: MarketSummary;
+  grid: DensityGrid | null;
+}

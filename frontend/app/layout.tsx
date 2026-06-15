@@ -79,6 +79,12 @@ export default function RootLayout({
                 AI Agent
               </Link>
           <Link href="/ledger">Ledger</Link>
+              <Link href="/vault" style={{ color: "var(--text)", textDecoration: "none" }}>
+                Vault
+              </Link>
+              <Link href="/density" style={{ color: "var(--text)", textDecoration: "none" }}>
+                Density
+              </Link>
             </nav>
           </div>
         </header>
