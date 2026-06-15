@@ -18,6 +18,7 @@ const PREDICT_ID: &str = "0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22c
 #[derive(Clone)]
 pub struct AppState {
     pub predict_client: Arc<PredictServerClient>,
+    pub cross_venue_client: Arc<crate::client::cross_venue::CrossVenueClient>,
 }
 
 #[derive(Serialize)]
@@ -467,5 +468,99 @@ pub async fn get_vault_health(
         .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
     let health = crate::engine::vault_health::compute_vault_health(&vault);
     Ok(Json(VaultHealthResponse { vault, health }))
+}
+
+#[derive(serde::Serialize)]
+pub struct CrossVenueResponse {
+    #[serde(flatten)]
+    pub external: crate::client::cross_venue::CrossVenue,
+    /// Predict ATM IV at the tenor closest to the realized/DVOL window, %.
+    pub predict_atm_iv: Option<f64>,
+    /// The tenor (days to expiry) of the Predict market we compared.
+    pub predict_tenor_days: Option<f64>,
+    /// Predict ATM IV minus Deribit DVOL (%). Positive = Predict richer.
+    pub predict_vs_deribit: Option<f64>,
+    /// Plain-language read: "rich", "cheap", or "in line".
+    pub predict_richness: Option<String>,
+}
+
+/// GET /api/cross-venue
+/// Frames Predict's ATM implied vol against Deribit's DVOL and Binance's
+/// realized vol. Picks the Predict market whose tenor is closest to the
+/// ~30-day reference so implied-vs-implied is a fair comparison.
+pub async fn get_cross_venue(
+    State(state): State<AppState>,
+) -> Result<Json<CrossVenueResponse>, (StatusCode, String)> {
+    // External references (best-effort; each leg degrades to None).
+    let external = state.cross_venue_client.fetch(30).await;
+
+    // Find a Predict market near 30 days to compare implied-vs-implied.
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let target_secs: i64 = 30 * 24 * 3600;
+    let mut predict_atm_iv: Option<f64> = None;
+    let mut predict_tenor_days: Option<f64> = None;
+
+    if let Ok(oracles) = state.predict_client.list_active_oracles(PREDICT_ID).await {
+        // Pick the active market whose time-to-expiry is closest to 30 days.
+        let mut best: Option<(&crate::types::Oracle, i64)> = None;
+        for o in &oracles {
+            let secs = o.seconds_until_expiry(now_ms);
+            if secs <= 0 {
+                continue;
+            }
+            let dist = (secs - target_secs).abs();
+            match best {
+                Some((_, bd)) if dist >= bd => {}
+                _ => best = Some((o, dist)),
+            }
+        }
+        if let Some((o, _)) = best {
+            if let Ok(st) = state.predict_client.oracle_state(&o.oracle_id).await {
+                if let (Some(price), Some(svi)) = (&st.latest_price, &st.latest_svi) {
+                    let grid = compute_strike_grid(&st.oracle, price, svi, now_ms, 11, 50);
+                    // ATM IV: the strike closest to the ATM strike.
+                    if let Some(row) = grid.strikes.iter().min_by(|a, b| {
+                        (a.strike_usd - grid.atm_strike_usd)
+                            .abs()
+                            .partial_cmp(&(b.strike_usd - grid.atm_strike_usd).abs())
+                            .unwrap()
+                    }) {
+                        if let Some(iv) = row.implied_vol_annualized {
+                            if iv > 0.0 {
+                                predict_atm_iv = Some(iv * 100.0);
+                                predict_tenor_days =
+                                    Some(grid.seconds_until_expiry as f64 / 86400.0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Compare Predict vs Deribit DVOL.
+    let (predict_vs_deribit, predict_richness) =
+        match (predict_atm_iv, external.deribit_dvol) {
+            (Some(p), Some(d)) => {
+                let diff = p - d;
+                let label = if diff > 3.0 {
+                    "rich"
+                } else if diff < -3.0 {
+                    "cheap"
+                } else {
+                    "in line"
+                };
+                (Some(diff), Some(label.to_string()))
+            }
+            _ => (None, None),
+        };
+
+    Ok(Json(CrossVenueResponse {
+        external,
+        predict_atm_iv,
+        predict_tenor_days,
+        predict_vs_deribit,
+        predict_richness,
+    }))
 }
 

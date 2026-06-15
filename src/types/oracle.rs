@@ -104,7 +104,12 @@ impl Oracle {
     }
 
     pub fn is_active(&self) -> bool {
-        self.status == OracleStatus::Active
+        // Status must be Active AND the market must not have expired.
+        // DeepBook Predict can leave an oracle's status Active past its
+        // expiry; such markets have a negative time-to-expiry and a broken
+        // IV (0%), so we exclude them from the live list.
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        self.status == OracleStatus::Active && self.seconds_until_expiry(now_ms) > 0
     }
 
     pub fn is_settled(&self) -> bool {

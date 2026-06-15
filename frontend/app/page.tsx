@@ -23,6 +23,7 @@ export default function MarketsPage() {
   const [fairMap, setFairMap] = useState<Record<string, number>>({});
   const [atmMap, setAtmMap] = useState<Record<string, number>>({});
   const [ageMap, setAgeMap] = useState<Record<string, number>>({});
+  const [ivMap, setIvMap] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,6 +42,7 @@ export default function MarketsPage() {
             const fm: Record<string, number> = {};
             const am: Record<string, number> = {};
             const ag: Record<string, number> = {};
+            const iv: Record<string, number> = {};
             results.forEach((r, i) => {
               if (r.status === "fulfilled") {
                 const g = r.value.grid;
@@ -51,11 +53,13 @@ export default function MarketsPage() {
                 fm[active[i].oracle_id] = atm.fair_up;
                 am[active[i].oracle_id] = g.atm_strike_usd;
                 ag[active[i].oracle_id] = g.price_age_seconds ?? 0;
+                if (atm.implied_vol_annualized != null) iv[active[i].oracle_id] = atm.implied_vol_annualized;
               }
             });
             setFairMap(fm);
             setAtmMap(am);
             setAgeMap(ag);
+            setIvMap(iv);
           }
         );
       })
@@ -128,7 +132,7 @@ export default function MarketsPage() {
             }}
           >
             {markets.map((m) => (
-              <MarketCard key={m.oracle_id} market={m} fair={fairMap[m.oracle_id]} atm={atmMap[m.oracle_id]} priceAge={ageMap[m.oracle_id]} isLargestEdge={m.oracle_id === largestEdgeId} />
+              <MarketCard key={m.oracle_id} market={m} fair={fairMap[m.oracle_id]} atm={atmMap[m.oracle_id]} iv={ivMap[m.oracle_id]} priceAge={ageMap[m.oracle_id]} isLargestEdge={m.oracle_id === largestEdgeId} />
             ))}
           </div>
         </>
@@ -137,7 +141,7 @@ export default function MarketsPage() {
   );
 }
 
-function MarketCard({ market, fair, atm, priceAge, isLargestEdge }: { market: MarketSummary; fair?: number; atm?: number; priceAge?: number; isLargestEdge?: boolean }) {
+function MarketCard({ market, fair, atm, iv, priceAge, isLargestEdge }: { market: MarketSummary; fair?: number; atm?: number; iv?: number; priceAge?: number; isLargestEdge?: boolean }) {
   return (
     <Link
       href={`/market/${market.oracle_id}`}
@@ -200,6 +204,28 @@ function MarketCard({ market, fair, atm, priceAge, isLargestEdge }: { market: Ma
         )}
       </div>
 
+      {fair !== undefined && (
+        <div style={{ margin: "4px 0 12px", padding: "12px 14px", background: "var(--bg-subtle, #f8fafc)", borderRadius: 10 }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, marginBottom: 6 }}>
+            DeepEdge fair value
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1, textAlign: "center", padding: "6px 0", background: "#dcfce7", borderRadius: 8 }}>
+              <div style={{ fontSize: 10, color: "#16a34a", fontWeight: 700 }}>UP</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#16a34a" }}>{(fair * 100).toFixed(1)}%</div>
+            </div>
+            <div style={{ flex: 1, textAlign: "center", padding: "6px 0", background: "#fee2e2", borderRadius: 8 }}>
+              <div style={{ fontSize: 10, color: "#dc2626", fontWeight: 700 }}>DOWN</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#dc2626" }}>{((1 - fair) * 100).toFixed(1)}%</div>
+            </div>
+          </div>
+          {iv !== undefined && (
+            <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-muted)", textAlign: "center" }}>
+              implied vol {(iv * 100).toFixed(0)}%
+            </div>
+          )}
+        </div>
+      )}
       <div
         style={{
           display: "flex",

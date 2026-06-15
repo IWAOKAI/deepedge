@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use deepedge::api::{AppState, list_markets, get_market, get_strikes, get_density, get_surface_health, get_calendar_health, get_walrus_blob, get_edges, get_manager, get_positions, get_summary, get_vault_health, run_agent, agent_status, agent_ledger};
+use deepedge::api::{AppState, list_markets, get_market, get_strikes, get_density, get_surface_health, get_calendar_health, get_walrus_blob, get_edges, get_manager, get_positions, get_summary, get_vault_health, get_cross_venue, run_agent, agent_status, agent_ledger};
 use deepedge::api::backtest::{calibration, accuracy};
 use deepedge::client::PredictServerClient;
 use tower_http::cors::CorsLayer;
@@ -42,7 +42,8 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     let predict_client = Arc::new(PredictServerClient::new()?);
-    let state = AppState { predict_client };
+    let cross_venue_client = std::sync::Arc::new(deepedge::client::cross_venue::CrossVenueClient::new());
+    let state = AppState { predict_client, cross_venue_client };
 
     let app = Router::new()
         .route("/", get(root))
@@ -61,6 +62,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/manager/positions", get(get_positions))
         .route("/api/manager/summary", get(get_summary))
         .route("/api/vault/health", get(get_vault_health))
+        .route("/api/cross-venue", get(get_cross_venue))
         .route("/api/agent/run", post(run_agent))
         .route("/api/agent/status", get(agent_status))
         .route("/api/agent/ledger", get(agent_ledger))

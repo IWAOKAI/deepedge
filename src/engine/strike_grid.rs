@@ -321,3 +321,110 @@ pub fn compute_surface_health(
     }
 }
 
+
+/// A single point on the risk-neutral density curve.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DensityPoint {
+    pub strike_usd: f64,
+    pub log_moneyness: f64,
+    pub density: f64,
+}
+
+/// The risk-neutral density the SVI surface prices, sampled across strikes,
+/// plus the summary an analyst actually reads off it: the mode (most likely
+/// settlement price), P(up) = P(S_T > F), and the 5th/95th percentile band.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DensityGrid {
+    pub spot_usd: f64,
+    pub forward_usd: f64,
+    pub seconds_until_expiry: i64,
+    pub mode_usd: f64,
+    pub prob_up: f64,
+    pub p05_usd: f64,
+    pub p95_usd: f64,
+    pub points: Vec<DensityPoint>,
+}
+
+/// Build the density grid from the live oracle price and SVI smile.
+/// Samples k = ln(K/F) on a symmetric grid, evaluates the Breeden-
+/// Litzenberger density, normalizes it numerically (trapezoid), and reads
+/// off the mode, P(up) and tail quantiles from the normalized curve.
+pub fn compute_density(
+    price: &OraclePrice,
+    svi: &SviParams,
+    num_points: usize,
+    k_max: f64,
+) -> DensityGrid {
+    let forward = price.forward_usd();
+    let spot = price.spot_usd();
+    let n = num_points.max(11);
+    let dk = (2.0 * k_max) / (n as f64 - 1.0);
+
+    // First pass: raw density on the grid.
+    let mut ks: Vec<f64> = Vec::with_capacity(n);
+    let mut raw: Vec<f64> = Vec::with_capacity(n);
+    for i in 0..n {
+        let k = -k_max + i as f64 * dk;
+        ks.push(k);
+        raw.push(svi.risk_neutral_density(k));
+    }
+
+    // Normalizing constant via trapezoid over k.
+    let mut area = 0.0;
+    for i in 1..n {
+        area += 0.5 * (raw[i - 1] + raw[i]) * dk;
+    }
+    if area <= 0.0 {
+        area = 1.0;
+    }
+
+    // Build normalized points and locate the mode.
+    let mut points = Vec::with_capacity(n);
+    let mut mode_k = 0.0;
+    let mut mode_d = -1.0;
+    for i in 0..n {
+        let k = ks[i];
+        let dens = raw[i] / area;
+        let strike = forward * k.exp();
+        if dens > mode_d {
+            mode_d = dens;
+            mode_k = k;
+        }
+        points.push(DensityPoint { strike_usd: strike, log_moneyness: k, density: dens });
+    }
+
+    // P(up) = P(S_T > F) = integral of normalized density over k > 0.
+    // Tail quantiles from the cumulative distribution.
+    let mut cdf = 0.0;
+    let mut prob_up = 0.0;
+    let mut p05 = forward * (-k_max).exp();
+    let mut p95 = forward * k_max.exp();
+    let mut got05 = false;
+    let mut got95 = false;
+    for i in 1..n {
+        let seg = 0.5 * (raw[i - 1] + raw[i]) * dk / area;
+        cdf += seg;
+        if !got05 && cdf >= 0.05 {
+            p05 = forward * ks[i].exp();
+            got05 = true;
+        }
+        if !got95 && cdf >= 0.95 {
+            p95 = forward * ks[i].exp();
+            got95 = true;
+        }
+        if ks[i] > 0.0 {
+            prob_up += seg;
+        }
+    }
+
+    DensityGrid {
+        spot_usd: spot,
+        forward_usd: forward,
+        seconds_until_expiry: 0,
+        mode_usd: forward * mode_k.exp(),
+        prob_up,
+        p05_usd: p05,
+        p95_usd: p95,
+        points,
+    }
+}

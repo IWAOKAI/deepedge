@@ -54,9 +54,6 @@ export default function RootLayout({
               <Link href="/" style={{ color: "var(--text)", textDecoration: "none" }}>
                 Markets
               </Link>
-              <Link href="/overview" style={{ color: "var(--text)", textDecoration: "none" }}>
-                Overview
-              </Link>
               <Link href="/insights" style={{ color: "var(--text)", textDecoration: "none" }}>
                 Insights
               </Link>

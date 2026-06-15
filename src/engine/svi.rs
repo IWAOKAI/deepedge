@@ -116,7 +116,33 @@ impl SviParams {
         let term2 = (wp * wp / 4.0) * (1.0 / w + 0.25);
         term1 - term2 + wpp / 2.0
     }
+
+    /// Risk-neutral probability density of log-moneyness k = ln(K/F),
+    /// implied by the SVI smile (Breeden-Litzenberger applied to the
+    /// Black-Scholes-in-total-variance parameterization, Gatheral 2006).
+    ///
+    /// In Gatheral's form the density is
+    ///   p(k) = g(k) / sqrt(2 pi w(k)) * exp( -d2(k)^2 / 2 )
+    /// where g(k) is the same butterfly function used for arbitrage checks
+    /// and d2(k) = -k/sqrt(w) - sqrt(w)/2. Because p(k) reuses g(k), a
+    /// surface that is butterfly-arbitrage-free (g >= 0 everywhere) is
+    /// exactly one whose implied density is non-negative -- the analytics
+    /// and the safety check are the same object.
+    pub fn risk_neutral_density(&self, k: f64) -> f64 {
+        let w = self.total_variance(k);
+        if w <= 0.0 {
+            return 0.0;
+        }
+        let g = self.butterfly_g(k);
+        let sqrt_w = w.sqrt();
+        let d2 = -k / sqrt_w - sqrt_w / 2.0;
+        let coef = g / (2.0 * std::f64::consts::PI * w).sqrt();
+        let dens = coef * (-0.5 * d2 * d2).exp();
+        // Clamp tiny negatives from numerical noise / mild arb to 0.
+        dens.max(0.0)
+    }
 }
+
 
 #[cfg(test)]
 mod arbitrage_tests {
@@ -157,3 +183,62 @@ mod arbitrage_tests {
     }
 }
 
+
+#[cfg(test)]
+mod density_tests {
+    use super::*;
+
+    fn sample_params() -> SviParams {
+        SviParams {
+            a: 0.000036,
+            b: 0.000609,
+            rho: -0.943,
+            m: 0.0199,
+            sigma: 0.0100,
+        }
+    }
+
+    #[test]
+    fn density_is_non_negative_near_atm() {
+        let p = sample_params();
+        for i in -50..=50 {
+            let k = i as f64 * 0.002;
+            let d = p.risk_neutral_density(k);
+            assert!(d >= 0.0, "density({})={} should be >= 0", k, d);
+        }
+    }
+
+    #[test]
+    fn density_integrates_to_approximately_one() {
+        // Numerically integrate p(k) dk over a wide range with the
+        // trapezoidal rule. Breeden-Litzenberger density integrates to 1.
+        let p = sample_params();
+        let lo = -1.5_f64;
+        let hi = 1.5_f64;
+        let n = 6000;
+        let dk = (hi - lo) / n as f64;
+        let mut area = 0.0;
+        let mut prev = p.risk_neutral_density(lo);
+        for i in 1..=n {
+            let k = lo + i as f64 * dk;
+            let cur = p.risk_neutral_density(k);
+            area += 0.5 * (prev + cur) * dk;
+            prev = cur;
+        }
+        // Allow generous tolerance: SVI tails + numerical integration.
+        assert!((area - 1.0).abs() < 0.05, "density integral = {}, expected ~1", area);
+    }
+
+    #[test]
+    fn density_has_a_peak() {
+        // The mode should be finite and the peak density positive.
+        let p = sample_params();
+        let mut max_d = 0.0;
+        for i in -200..=200 {
+            let k = i as f64 * 0.005;
+            let d = p.risk_neutral_density(k);
+            if d > max_d { max_d = d; }
+        }
+        assert!(max_d > 0.0, "peak density should be positive, got {}", max_d);
+    }
+}

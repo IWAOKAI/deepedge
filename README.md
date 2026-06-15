@@ -278,22 +278,17 @@ git-ignored.
 
 ---
 
-## Ten screens
+## Nine screens
 
-- **Markets** — every live BTC oracle, sorted by expiry, with "closing soon" flags.
-- **Overview** — DeepEdge fair value across all live markets in one table; the whole board at a glance.
+- **Markets** — every live BTC market with DeepEdge's UP/DOWN fair value and implied vol on each card, sorted by expiry, flagging the largest-edge market, the calibration-caution bucket, and any stale on-chain price.
 - **Market detail** — the SVI volatility smile, a full fair-probability table by strike, live auto-refresh every 30s, and the bet panel.
 - **Insights** — the calibration backtest, visualized: where the market is mispriced, by direction.
+- **Density** — the risk-neutral distribution the SVI surface prices, plotted, with mode, P(up), and 90% range; the same g(k) as the arbitrage check.
+- **Vault** — the PLP vault's solvency grade (GREEN / AMBER / RED) with worst-case payout coverage, utilization, and exit liquidity; the same read the Risk Officer uses.
+- **Cross-Venue** — Predict's ATM IV against Deribit DVOL and Binance realized vol, with the rich/cheap verdict and the volatility risk premium.
 - **Portfolio** — your on-chain betting history, account value, and realized P&L.
 - **AI Agent** — the verifiable autonomous loop, live: press *Run one cycle* and watch the Strategist propose, the Risk Officer veto, the decision land on Walrus, the hash verify, and the Mandate enforce — all on-chain.
 - **Ledger** — the agent's entire decision history, auditable: every cycle (bet, veto, or no-bet) with both agents' reasoning, its Walrus blob and SHA-256, and a *Verify hash* button that re-fetches the blob and re-checks the hash in your browser. A trading bot says "trust me"; this page says "check me".
-- **Vault** — the PLP vault's solvency grade (GREEN / AMBER / RED) with worst-case payout coverage, utilization, and exit liquidity; the same read the Risk Officer uses.
-- **Density** — the risk-neutral distribution the SVI surface prices, plotted, with mode, P(up), and 90% range; the same g(k) as the arbitrage check.
-- **Cross-Venue** — Predict's ATM IV against Deribit DVOL and Binance realized vol, with the rich/cheap verdict and the volatility risk premium.
-
-**Overview** — fair value across every live market:
-
-![Overview table](docs/screenshots/overview.png)
 
 **Insights** — the calibration backtest, visualized:
 
