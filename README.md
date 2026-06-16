@@ -6,7 +6,11 @@ A trader-facing analytics and betting layer for DeepBook Predict on Sui — see 
 
 > Submission for Sui Overflow 2026 — DeepBook Track
 
-![Market detail: SVI volatility smile, fair-probability table, and the bet panel](docs/screenshots/market.png)
+## 🎥 Demo
+
+**▶ [Watch the demo video](https://www.youtube.com/watch?v=hoIOYAMy9ks)** — the full agent loop, the on-chain Mandate, and live hash verification in the Ledger.
+
+[![DeepEdge demo](docs/screenshots/market.png)](https://www.youtube.com/watch?v=hoIOYAMy9ks)
 
 ---
 
