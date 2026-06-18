@@ -76,3 +76,45 @@ export function buildMintTx(params: {
 
   return tx;
 }
+
+/**
+ * Mint a RANGE position: bet that the price settles between lower and higher.
+ * Uses predict::mint_range directly (same path as buildMintTx for binary).
+ * @param lowerStrike  lower bound, 1e9-scaled
+ * @param higherStrike higher bound, 1e9-scaled (must be > lowerStrike)
+ */
+export function buildRangeMintTx(params: {
+  managerId: string;
+  oracleId: string;
+  expiry: bigint;
+  lowerStrike: bigint; // 1e9-scaled
+  higherStrike: bigint; // 1e9-scaled
+  quantity: bigint; // 1e6-scaled
+}): Transaction {
+  const tx = new Transaction();
+
+  const rangeKey = tx.moveCall({
+    target: `${PREDICT_PACKAGE}::range_key::new`,
+    arguments: [
+      tx.pure.id(params.oracleId),
+      tx.pure.u64(params.expiry),
+      tx.pure.u64(params.lowerStrike),
+      tx.pure.u64(params.higherStrike),
+    ],
+  });
+
+  tx.moveCall({
+    target: `${PREDICT_PACKAGE}::predict::mint_range`,
+    typeArguments: [DUSDC_TYPE],
+    arguments: [
+      tx.object(PREDICT_ID),
+      tx.object(params.managerId),
+      tx.object(params.oracleId),
+      rangeKey,
+      tx.pure.u64(params.quantity),
+      tx.object(CLOCK_ID),
+    ],
+  });
+
+  return tx;
+}

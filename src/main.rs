@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use deepedge::api::{AppState, list_markets, get_market, get_strikes, get_density, get_surface_health, get_calendar_health, get_walrus_blob, get_edges, get_manager, get_positions, get_summary, get_vault_health, get_cross_venue, run_agent, agent_status, agent_ledger};
+use deepedge::api::{AppState, list_markets, get_market, get_strikes, get_density, get_surface_health, get_calendar_health, get_walrus_blob, get_edges, get_manager, get_positions, get_ranges, get_summary, get_vault_health, get_cross_venue, run_agent, agent_status, agent_ledger};
 use deepedge::api::backtest::{calibration, accuracy};
 use deepedge::client::PredictServerClient;
 use tower_http::cors::CorsLayer;
@@ -61,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/backtest/accuracy", get(accuracy))
         .route("/api/manager", get(get_manager))
         .route("/api/manager/positions", get(get_positions))
+        .route("/api/manager/ranges", get(get_ranges))
         .route("/api/manager/summary", get(get_summary))
         .route("/api/vault/health", get(get_vault_health))
         .route("/api/cross-venue", get(get_cross_venue))

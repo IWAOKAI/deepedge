@@ -6,7 +6,7 @@ import {
   useSignAndExecuteTransaction,
 } from "@mysten/dapp-kit";
 import { api, ManagerEvent } from "@/lib/api";
-import { buildDepositTx, buildMintTx } from "@/lib/transactions";
+import { buildDepositTx, buildMintTx, buildRangeMintTx } from "@/lib/transactions";
 
 interface BetPanelProps {
   oracleId: string;
@@ -31,6 +31,9 @@ export function BetPanel({ oracleId, expiry, atmStrike, strikes }: BetPanelProps
 
   const [selectedStrike, setSelectedStrike] = useState<number>(atmStrike);
   const [isUp, setIsUp] = useState(true);
+  const [mode, setMode] = useState<"binary" | "range">("binary");
+  const [lowerStrike, setLowerStrike] = useState<number>(atmStrike);
+  const [higherStrike, setHigherStrike] = useState<number>(atmStrike);
   const [betUsd, setBetUsd] = useState("5");
   const [depositUsd, setDepositUsd] = useState("10");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
@@ -86,6 +89,25 @@ export function BetPanel({ oracleId, expiry, atmStrike, strikes }: BetPanelProps
     }
   }, [strikes, selectedStrike]);
 
+  // Initialize range bounds to straddle the ATM strike (one tick below/above),
+  // so the band has non-zero width and a probability shows immediately.
+  useEffect(() => {
+    if (strikes.length < 2) return;
+    const sorted = [...strikes].sort((a, b) => a.strike_usd - b.strike_usd);
+    const atmIdx = sorted.reduce(
+      (bi, s, i) =>
+        Math.abs(s.strike_usd - atmStrike) < Math.abs(sorted[bi].strike_usd - atmStrike) ? i : bi,
+      0
+    );
+    const lo = sorted[Math.max(0, atmIdx - 10)];
+    const hi = sorted[Math.min(sorted.length - 1, atmIdx + 10)];
+    if (lo && hi && lo.strike_usd < hi.strike_usd) {
+      setLowerStrike(lo.strike_usd);
+      setHigherStrike(hi.strike_usd);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strikes]);
+
   async function handleDeposit() {
     const amount = BigInt(Math.round(parseFloat(depositUsd) * 1e6));
     if (amount <= 0n || !managerId) return;
@@ -114,21 +136,43 @@ export function BetPanel({ oracleId, expiry, atmStrike, strikes }: BetPanelProps
       setShowConfirm(false);
       return;
     }
+    // Range bets need a valid band (lower < higher) before we build the tx.
+    if (mode === "range" && lowerStrike >= higherStrike) {
+      setStatus({
+        kind: "error",
+        msg: `Lower strike ($${lowerStrike.toLocaleString()}) must be below higher strike ($${higherStrike.toLocaleString()}).`,
+      });
+      setShowConfirm(false);
+      return;
+    }
     setShowConfirm(false);
     setStatus({ kind: "working", msg: "Placing bet..." });
     try {
-      const tx = buildMintTx({
-        managerId,
-        oracleId,
-        expiry: BigInt(expiry),
-        strike: BigInt(Math.round(selectedStrike * 1e9)),
-        isUp,
-        quantity,
-      });
+      const tx =
+        mode === "range"
+          ? buildRangeMintTx({
+              managerId,
+              oracleId,
+              expiry: BigInt(expiry),
+              lowerStrike: BigInt(Math.round(lowerStrike * 1e9)),
+              higherStrike: BigInt(Math.round(higherStrike * 1e9)),
+              quantity,
+            })
+          : buildMintTx({
+              managerId,
+              oracleId,
+              expiry: BigInt(expiry),
+              strike: BigInt(Math.round(selectedStrike * 1e9)),
+              isUp,
+              quantity,
+            });
       const result = await signAndExecute({ transaction: tx });
       setStatus({
         kind: "ok",
-        msg: `Bet placed: ${isUp ? "UP" : "DOWN"} $${selectedStrike.toLocaleString()}`,
+        msg:
+          mode === "range"
+            ? `Range bet placed: $${lowerStrike.toLocaleString()}–$${higherStrike.toLocaleString()}`
+            : `Bet placed: ${isUp ? "UP" : "DOWN"} $${selectedStrike.toLocaleString()}`,
         digest: result.digest,
       });
       await refreshBalance(managerId);
@@ -163,6 +207,23 @@ export function BetPanel({ oracleId, expiry, atmStrike, strikes }: BetPanelProps
     ? ((isUp ? selectedRow.fair_up : selectedRow.fair_down) * 100).toFixed(1)
     : "-";
 
+  // Range fair value = P(settle < higher) - P(settle < lower)
+  //                  = fair_down(higher) - fair_down(lower).
+  const lowerRow = strikes.reduce(
+    (best, s) =>
+      Math.abs(s.strike_usd - lowerStrike) < Math.abs(best.strike_usd - lowerStrike) ? s : best,
+    strikes[0]
+  );
+  const higherRow = strikes.reduce(
+    (best, s) =>
+      Math.abs(s.strike_usd - higherStrike) < Math.abs(best.strike_usd - higherStrike) ? s : best,
+    strikes[0]
+  );
+  const rangeFairPct =
+    lowerRow && higherRow && higherStrike > lowerStrike
+      ? Math.max(0, (higherRow.fair_down - lowerRow.fair_down) * 100).toFixed(1)
+      : "-";
+
   return (
     <Panel>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -187,49 +248,146 @@ export function BetPanel({ oracleId, expiry, atmStrike, strikes }: BetPanelProps
         </div>
       </div>
 
+      {/* UP / DOWN / RANGE — three peer choices on one row */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <button onClick={() => setIsUp(true)} style={isUp ? upBtnActive : upBtn}>UP</button>
-        <button onClick={() => setIsUp(false)} style={!isUp ? downBtnActive : downBtn}>DOWN</button>
+        <button
+          onClick={() => { setMode("binary"); setIsUp(true); }}
+          style={mode === "binary" && isUp ? upBtnActive : upBtn}
+        >
+          UP
+        </button>
+        <button
+          onClick={() => { setMode("binary"); setIsUp(false); }}
+          style={mode === "binary" && !isUp ? downBtnActive : downBtn}
+        >
+          DOWN
+        </button>
+        <button
+          onClick={() => {
+            setMode("range");
+            if (strikes.length >= 2 && lowerStrike >= higherStrike) {
+              const sorted = [...strikes].sort((a, b) => a.strike_usd - b.strike_usd);
+              let atmIdx = 0;
+              for (let i = 0; i < sorted.length; i++) {
+                if (Math.abs(sorted[i].strike_usd - atmStrike) < Math.abs(sorted[atmIdx].strike_usd - atmStrike)) {
+                  atmIdx = i;
+                }
+              }
+              const lo = sorted[Math.max(0, atmIdx - 10)];
+              const hi = sorted[Math.min(sorted.length - 1, atmIdx + 10)];
+              if (lo && hi && lo.strike_usd < hi.strike_usd) {
+                setLowerStrike(lo.strike_usd);
+                setHigherStrike(hi.strike_usd);
+              }
+            }
+          }}
+          style={mode === "range" ? rangeBtnActive : rangeBtn}
+        >
+          RANGE
+        </button>
       </div>
 
-      <label style={{ fontSize: 13, color: "var(--text-muted)" }}>Strike</label>
-      <select
-        value={selectedStrike}
-        onChange={(e) => setSelectedStrike(parseFloat(e.target.value))}
-        style={{ ...inputStyle, width: "100%", marginTop: 6, marginBottom: 14 }}
-      >
-        {strikes.map((s) => (
-          <option key={s.strike_usd} value={s.strike_usd}>
-            ${s.strike_usd.toLocaleString()}{Math.abs(s.strike_usd - atmStrike) < 1 ? " (current price)" : ""}
-          </option>
-        ))}
-      </select>
+      {mode === "binary" ? (
+        <>
 
-      <div
-        style={{
-          marginBottom: 14,
-          padding: 12,
-          borderRadius: 10,
-          background: "#f0f9ff",
-          border: "1px solid #bae6fd",
-        }}
-      >
-        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>
-          DeepEdge fair value for {isUp ? "UP" : "DOWN"} @ ${selectedStrike.toLocaleString()}
-        </div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-          <strong style={{ fontSize: 24, color: isUp ? "var(--up)" : "var(--down)" }}>
-            {fairPct}%
-          </strong>
-          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-            model probability BTC settles {isUp ? "above" : "below"} this strike
-          </span>
-        </div>
-        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
-          A fair bet pays out at this probability. Bet when the market price is
-          cheaper than fair.
-        </div>
-      </div>
+          <label style={{ fontSize: 13, color: "var(--text-muted)" }}>Strike</label>
+          <select
+            value={selectedStrike}
+            onChange={(e) => setSelectedStrike(parseFloat(e.target.value))}
+            style={{ ...inputStyle, width: "100%", marginTop: 6, marginBottom: 14 }}
+          >
+            {strikes.map((s) => (
+              <option key={s.strike_usd} value={s.strike_usd}>
+                ${s.strike_usd.toLocaleString()}{Math.abs(s.strike_usd - atmStrike) < 1 ? " (current price)" : ""}
+              </option>
+            ))}
+          </select>
+
+          <div
+            style={{
+              marginBottom: 14,
+              padding: 12,
+              borderRadius: 10,
+              background: "#f0f9ff",
+              border: "1px solid #bae6fd",
+            }}
+          >
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>
+              DeepEdge fair value for {isUp ? "UP" : "DOWN"} @ ${selectedStrike.toLocaleString()}
+            </div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <strong style={{ fontSize: 24, color: isUp ? "var(--up)" : "var(--down)" }}>
+                {fairPct}%
+              </strong>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                model probability BTC settles {isUp ? "above" : "below"} this strike
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+              A fair bet pays out at this probability. Bet when the market price is
+              cheaper than fair.
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 13, color: "var(--text-muted)" }}>Lower</label>
+              <select
+                value={lowerStrike}
+                onChange={(e) => setLowerStrike(parseFloat(e.target.value))}
+                style={{ ...inputStyle, width: "100%", marginTop: 6 }}
+              >
+                {strikes.map((s) => (
+                  <option key={s.strike_usd} value={s.strike_usd}>
+                    ${s.strike_usd.toLocaleString()}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 13, color: "var(--text-muted)" }}>Higher</label>
+              <select
+                value={higherStrike}
+                onChange={(e) => setHigherStrike(parseFloat(e.target.value))}
+                style={{ ...inputStyle, width: "100%", marginTop: 6 }}
+              >
+                {strikes.map((s) => (
+                  <option key={s.strike_usd} value={s.strike_usd}>
+                    ${s.strike_usd.toLocaleString()}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginBottom: 14,
+              padding: 12,
+              borderRadius: 10,
+              background: "#f0f9ff",
+              border: "1px solid #bae6fd",
+            }}
+          >
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>
+              DeepEdge fair value for RANGE ${lowerStrike.toLocaleString()}–${higherStrike.toLocaleString()}
+            </div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <strong style={{ fontSize: 24, color: "var(--primary-dark)" }}>
+                {rangeFairPct}%
+              </strong>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                model probability BTC settles within this band
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+              A vertical range priced as one instrument. Your loss is capped by the band.
+            </div>
+          </div>
+        </>
+      )}
 
       <label style={{ fontSize: 13, color: "var(--text-muted)" }}>Bet amount (DUSDC)</label>
       <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -365,3 +523,10 @@ const upBtn: React.CSSProperties = {
 const upBtnActive: React.CSSProperties = { ...upBtn, background: "var(--up)", color: "white", border: "none" };
 const downBtn: React.CSSProperties = { ...upBtn, color: "var(--down)" };
 const downBtnActive: React.CSSProperties = { ...downBtn, background: "var(--down)", color: "white", border: "none" };
+const rangeBtn: React.CSSProperties = { ...upBtn, color: "var(--primary-dark)" };
+const rangeBtnActive: React.CSSProperties = {
+  ...rangeBtn,
+  background: "var(--primary-dark)",
+  color: "white",
+  border: "none",
+};

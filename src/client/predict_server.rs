@@ -140,6 +140,14 @@ impl PredictServerClient {
         Ok(res.json().await?)
     }
 
+    /// GET /managers/{id}/ranges
+    /// 指定 manager の range position（vertical range mint）履歴を返す。
+    pub async fn manager_ranges(&self, manager_id: &str) -> Result<serde_json::Value> {
+        let url = format!("{}/managers/{}/ranges", self.base_url, manager_id);
+        let res = self.http.get(&url).send().await?.error_for_status()?;
+        Ok(res.json().await?)
+    }
+
     pub async fn managers_by_owner(&self, owner: &str) -> Result<serde_json::Value> {
         let url = format!("{}/managers?owner={}", self.base_url, owner);
         let res = self.http.get(&url).send().await?.error_for_status()?;

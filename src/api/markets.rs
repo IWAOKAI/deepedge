@@ -439,6 +439,18 @@ pub async fn get_positions(
     Ok(Json(result))
 }
 
+pub async fn get_ranges(
+    State(state): State<AppState>,
+    Query(q): Query<ManagerIdQuery>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let result = state
+        .predict_client
+        .manager_ranges(&q.manager)
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    Ok(Json(result))
+}
+
 pub async fn get_summary(
     State(state): State<AppState>,
     Query(q): Query<ManagerIdQuery>,

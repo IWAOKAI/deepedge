@@ -159,6 +159,21 @@ export interface PositionsResponse {
   minted?: PositionMint[];
 }
 
+export interface PositionRange {
+  digest: string;
+  oracle_id: string;
+  lower_strike: number;
+  higher_strike: number;
+  quantity: number;
+  cost: number;
+  ask_price: number;
+  checkpoint_timestamp_ms: number;
+}
+
+export interface RangesResponse {
+  minted?: PositionRange[];
+}
+
 export interface ManagerSummary {
   open_positions: number;
   realized_pnl: number;
@@ -242,6 +257,8 @@ export const api = {
     getJson<ManagerEvent[]>(`/api/manager?owner=${owner}`),
   positions: (managerId: string) =>
     getJson<PositionsResponse>(`/api/manager/positions?manager=${managerId}`),
+  ranges: (managerId: string) =>
+    getJson<RangesResponse>(`/api/manager/ranges?manager=${managerId}`),
   summary: (managerId: string) =>
     getJson<ManagerSummary>(`/api/manager/summary?manager=${managerId}`),
   agentRun: () => postJson<AgentResult>("/api/agent/run"),
