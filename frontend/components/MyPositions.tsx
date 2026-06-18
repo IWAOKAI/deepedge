@@ -25,12 +25,19 @@ export function MyPositions({ oracleId }: { oracleId?: string }) {
           return;
         }
         const mid = events[0].manager_id;
-        const [pos, sum] = await Promise.all([
-          api.positions(mid),
-          api.summary(mid),
-        ]);
+        // Positions and summary are fetched independently: the Predict
+        // server's summary endpoint can 500 (e.g. "missing mark quote
+        // results" near expiry), and we must not let that wipe out the
+        // positions list — the bets are real and indexed regardless.
+        const pos = await api.positions(mid);
         setPositions(pos.minted ?? []);
-        setSummary(sum);
+        try {
+          const sum = await api.summary(mid);
+          setSummary(sum);
+        } catch {
+          // Balance/summary unavailable (server-side); positions still show.
+          setSummary(null);
+        }
       })
       .catch(() => setPositions([]))
       .finally(() => setLoading(false));

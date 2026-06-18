@@ -103,6 +103,17 @@ export function BetPanel({ oracleId, expiry, atmStrike, strikes }: BetPanelProps
   async function handleBet() {
     const quantity = BigInt(Math.round(parseFloat(betUsd) * 1e6));
     if (quantity <= 0n || !managerId) return;
+    // Guard: don't submit a bet that exceeds the manager's DUSDC balance,
+    // otherwise the on-chain mint reverts and the user only sees a cryptic error.
+    const betAmount = parseFloat(betUsd);
+    if (mgrBalance !== null && betAmount > mgrBalance) {
+      setStatus({
+        kind: "error",
+        msg: `Insufficient balance: you have $${mgrBalance.toFixed(2)} but are betting $${betAmount.toFixed(2)}. Deposit more DUSDC first.`,
+      });
+      setShowConfirm(false);
+      return;
+    }
     setShowConfirm(false);
     setStatus({ kind: "working", msg: "Placing bet..." });
     try {
@@ -159,7 +170,11 @@ export function BetPanel({ oracleId, expiry, atmStrike, strikes }: BetPanelProps
         <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
           Manager balance:{" "}
           <strong style={{ color: "var(--primary-dark)" }}>
-            {mgrBalance === null ? "..." : `$${mgrBalance.toFixed(2)}`}
+            {managerId === null
+              ? "no manager yet"
+              : mgrBalance === null
+              ? "…"
+              : `$${mgrBalance.toFixed(2)}`}
           </strong>
         </span>
       </div>
