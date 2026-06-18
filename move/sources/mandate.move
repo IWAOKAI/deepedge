@@ -12,6 +12,7 @@ module deepedge_mandate::mandate {
     use deepbook_predict::predict_manager::PredictManager;
     use deepbook_predict::oracle::OracleSVI;
     use deepbook_predict::market_key::MarketKey;
+    use deepbook_predict::range_key::RangeKey;
     use std::string::String;
 
     // --- errors ---
@@ -122,6 +123,29 @@ module deepedge_mandate::mandate {
     ) {
         let receipt = authorize(m, amount);
         predict::mint<T>(predict_obj, manager, oracle, key, quantity, clock, ctx);
+        record_and_consume(m, receipt);
+    }
+
+    /// Range version of execute_bet: authorize, place a real RANGE bet via
+    /// predict::mint_range, and record — atomically. Same hot-potato guarantee
+    /// as execute_bet: the BetReceipt from authorize() can only be settled by
+    /// record_and_consume(), so the mandate checks and the spend record are
+    /// inseparable for range positions too.
+    ///
+    /// `key` is a RangeKey (lower, higher) instead of a single-strike MarketKey.
+    public fun execute_range_bet<T>(
+        m: &mut Mandate,
+        amount: u64,
+        predict_obj: &mut Predict,
+        manager: &mut PredictManager,
+        oracle: &OracleSVI,
+        key: RangeKey,
+        quantity: u64,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        let receipt = authorize(m, amount);
+        predict::mint_range<T>(predict_obj, manager, oracle, key, quantity, clock, ctx);
         record_and_consume(m, receipt);
     }
 

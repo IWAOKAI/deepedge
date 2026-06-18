@@ -280,6 +280,8 @@ git-ignored.
 
 **Integrated with the canonical DeepBook Predict.** A companion package `0x255c956a9414038019dcef7e966cdc507b64e67d007b6b3623f1701e466668d4` wraps `execute_bet` around the *canonical* Predict (`0xf5ea2b3749c65d6e56507cc35388719aadb28f9cab873696a2f8687f5c785138`) — authorize, mint, record, atomically. Proof: tx [`DrX6K3C5DiZJGVToF8Mb7YgQDewmTmo7LNU9d92Nig8R`](https://testnet.suivision.xyz/txblock/DrX6K3C5DiZJGVToF8Mb7YgQDewmTmo7LNU9d92Nig8R) emits, in one transaction, `predict::PositionMinted` (from DeepBook Predict) **and** `mandate::BetAuthorized` (from our Mandate). The PositionMinted is theirs; the BetAuthorized is ours.
 
+**Range markets too.** The same Mandate wraps `predict::mint_range` via `execute_range_bet` — a vertical range (lower, higher) priced as a single instrument. After a real range mint, the Mandate's `spent` advanced from 0.1 to 0.3 DUSDC, proving the hot-potato enforcement (authorize → mint_range → record) holds for range positions exactly as it does for binary up/down. One Mandate primitive enforces both instrument types.
+
 
 ---
 
