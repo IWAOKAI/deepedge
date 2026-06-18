@@ -147,6 +147,7 @@ export interface ManagerEvent {
 export interface PositionMint {
   digest: string;
   oracle_id: string;
+  expiry: number;
   is_up: boolean;
   strike: number;
   quantity: number;
@@ -155,13 +156,28 @@ export interface PositionMint {
   checkpoint_timestamp_ms: number;
 }
 
+export interface PositionRedeemed {
+  digest: string;
+  oracle_id: string;
+  expiry: number;
+  is_up: boolean;
+  strike: number;
+  quantity: number;
+  payout: number;
+  bid_price: number;
+  is_settled: boolean;
+  checkpoint_timestamp_ms: number;
+}
+
 export interface PositionsResponse {
   minted?: PositionMint[];
+  redeemed?: PositionRedeemed[];
 }
 
 export interface PositionRange {
   digest: string;
   oracle_id: string;
+  expiry: number;
   lower_strike: number;
   higher_strike: number;
   quantity: number;
@@ -170,8 +186,22 @@ export interface PositionRange {
   checkpoint_timestamp_ms: number;
 }
 
+export interface RangeRedeemed {
+  digest: string;
+  oracle_id: string;
+  expiry: number;
+  lower_strike: number;
+  higher_strike: number;
+  quantity: number;
+  payout: number;
+  bid_price: number;
+  is_settled: boolean;
+  checkpoint_timestamp_ms: number;
+}
+
 export interface RangesResponse {
   minted?: PositionRange[];
+  redeemed?: RangeRedeemed[];
 }
 
 export interface ManagerSummary {

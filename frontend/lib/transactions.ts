@@ -118,3 +118,76 @@ export function buildRangeMintTx(params: {
 
   return tx;
 }
+
+/**
+ * Redeem (close) a binary position. Before settlement this pays the live bid
+ * (early exit / take-profit); after settlement it pays $1·qty if it won, else $0.
+ */
+export function buildRedeemTx(params: {
+  managerId: string;
+  oracleId: string;
+  expiry: bigint;
+  strike: bigint;
+  isUp: boolean;
+  quantity: bigint;
+}): Transaction {
+  const tx = new Transaction();
+  const direction = params.isUp ? "up" : "down";
+  const marketKey = tx.moveCall({
+    target: `${PREDICT_PACKAGE}::market_key::${direction}`,
+    arguments: [
+      tx.pure.id(params.oracleId),
+      tx.pure.u64(params.expiry),
+      tx.pure.u64(params.strike),
+    ],
+  });
+  tx.moveCall({
+    target: `${PREDICT_PACKAGE}::predict::redeem`,
+    typeArguments: [DUSDC_TYPE],
+    arguments: [
+      tx.object(PREDICT_ID),
+      tx.object(params.managerId),
+      tx.object(params.oracleId),
+      marketKey,
+      tx.pure.u64(params.quantity),
+      tx.object(CLOCK_ID),
+    ],
+  });
+  return tx;
+}
+
+/**
+ * Redeem (close) a range position. Same early-exit semantics as buildRedeemTx.
+ */
+export function buildRedeemRangeTx(params: {
+  managerId: string;
+  oracleId: string;
+  expiry: bigint;
+  lowerStrike: bigint;
+  higherStrike: bigint;
+  quantity: bigint;
+}): Transaction {
+  const tx = new Transaction();
+  const rangeKey = tx.moveCall({
+    target: `${PREDICT_PACKAGE}::range_key::new`,
+    arguments: [
+      tx.pure.id(params.oracleId),
+      tx.pure.u64(params.expiry),
+      tx.pure.u64(params.lowerStrike),
+      tx.pure.u64(params.higherStrike),
+    ],
+  });
+  tx.moveCall({
+    target: `${PREDICT_PACKAGE}::predict::redeem_range`,
+    typeArguments: [DUSDC_TYPE],
+    arguments: [
+      tx.object(PREDICT_ID),
+      tx.object(params.managerId),
+      tx.object(params.oracleId),
+      rangeKey,
+      tx.pure.u64(params.quantity),
+      tx.object(CLOCK_ID),
+    ],
+  });
+  return tx;
+}
