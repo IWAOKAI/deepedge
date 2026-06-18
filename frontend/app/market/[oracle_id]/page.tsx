@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api, StrikesResponse, EdgesResponse, StrikeRow } from "@/lib/api";
 import { BetPanel } from "@/components/BetPanel";
 import { MyPositions } from "@/components/MyPositions";
+import { SafeBoundary } from "@/components/SafeBoundary";
 import {
   LineChart,
   Line,
@@ -262,7 +263,9 @@ export default function MarketDetailPage() {
 
       {/* my positions */}
       <div style={{ marginBottom: 24 }}>
-        <MyPositions oracleId={oracle.oracle_id} />
+        <SafeBoundary label="Your positions couldn't be loaded.">
+          <MyPositions oracleId={oracle.oracle_id} />
+        </SafeBoundary>
       </div>
 
       {/* fair probability table */}

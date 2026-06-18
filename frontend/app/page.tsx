@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit";
 import { api, MarketSummary } from "@/lib/api";
+import { SafeBoundary } from "@/components/SafeBoundary";
 
 function minsUntil(expiryMs: number): number {
   return Math.floor((expiryMs - Date.now()) / 60000);
@@ -46,12 +47,18 @@ export default function MarketsPage() {
             results.forEach((r, i) => {
               if (r.status === "fulfilled") {
                 const g = r.value.grid;
+                // Guard against a market whose strike grid came back empty or
+                // malformed: skip it rather than crashing the whole list.
+                if (!g || !Array.isArray(g.strikes) || g.strikes.length === 0) {
+                  return;
+                }
                 const atm = g.strikes.reduce((best, row) =>
                   Math.abs(row.strike_usd - g.atm_strike_usd) <
                   Math.abs(best.strike_usd - g.atm_strike_usd) ? row : best,
                   g.strikes[0]);
-                fm[active[i].oracle_id] = atm.fair_up;
-                am[active[i].oracle_id] = g.atm_strike_usd;
+                if (!atm) return;
+                if (atm.fair_up != null) fm[active[i].oracle_id] = atm.fair_up;
+                if (g.atm_strike_usd != null) am[active[i].oracle_id] = g.atm_strike_usd;
                 ag[active[i].oracle_id] = g.price_age_seconds ?? 0;
                 if (atm.implied_vol_annualized != null) iv[active[i].oracle_id] = atm.implied_vol_annualized;
               }
@@ -72,6 +79,7 @@ export default function MarketsPage() {
     let id: string | null = null;
     let best = -1;
     for (const [oid, fair] of Object.entries(fairMap)) {
+      if (typeof fair !== "number" || Number.isNaN(fair)) continue;
       const d = Math.abs(fair - 0.5);
       if (d > best) { best = d; id = oid; }
     }
@@ -124,17 +132,21 @@ export default function MarketsPage() {
           >
             {markets.length} active markets
           </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-              gap: 16,
-            }}
-          >
-            {markets.map((m) => (
-              <MarketCard key={m.oracle_id} market={m} fair={fairMap[m.oracle_id]} atm={atmMap[m.oracle_id]} iv={ivMap[m.oracle_id]} priceAge={ageMap[m.oracle_id]} isLargestEdge={m.oracle_id === largestEdgeId} />
-            ))}
-          </div>
+          <SafeBoundary label="The market list couldn't be displayed. Please refresh.">
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                gap: 16,
+              }}
+            >
+              {markets.map((m) => (
+                <SafeBoundary key={m.oracle_id} label="">
+                  <MarketCard market={m} fair={fairMap[m.oracle_id]} atm={atmMap[m.oracle_id]} iv={ivMap[m.oracle_id]} priceAge={ageMap[m.oracle_id]} isLargestEdge={m.oracle_id === largestEdgeId} />
+                </SafeBoundary>
+              ))}
+            </div>
+          </SafeBoundary>
         </>
       )}
     </div>

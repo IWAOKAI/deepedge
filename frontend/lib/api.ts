@@ -227,6 +227,9 @@ export interface AgentStep {
   outcome?: string;
   reason?: string;
   error?: string;
+  open_count?: number;
+  redeem_suggested?: number;
+  holdings_review?: Array<{ side: string; strike_usd: number; action: string; reason: string }>;
 }
 
 export interface AgentResult {

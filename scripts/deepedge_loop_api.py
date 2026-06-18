@@ -445,7 +445,7 @@ def run_cycle_json():
         steps.append({"stage": "position_review", "status": "done",
             "open_count": len(open_pos),
             "redeem_suggested": redeem_count,
-            "review": redeem_review})
+            "holdings_review": redeem_review})
 
         # 2. strategist
         prop = strategist(oracle, near, cal, dens)

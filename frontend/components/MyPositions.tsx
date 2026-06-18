@@ -290,7 +290,7 @@ export function MyPositions({ oracleId }: { oracleId?: string }) {
   });
   const hasClosed = closedBinary.length > 0 || closedRange.length > 0;
 
-  const dusdc = summary?.balances?.find((b) => b.quote_asset.includes("dusdc"));
+  const dusdc = summary?.balances?.find((b) => b.quote_asset?.includes("dusdc"));
   const pnl = (summary?.realized_pnl ?? 0) / 1e6;
 
   return (

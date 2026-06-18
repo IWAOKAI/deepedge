@@ -5,6 +5,7 @@ import { api, AgentResult, AgentStep, MandateStatus } from "@/lib/api";
 
 const STAGE_META: Record<string, { icon: string; label: string }> = {
   observe: { icon: "1", label: "Observe market" },
+  position_review: { icon: "↺", label: "Review open positions" },
   strategist: { icon: "2", label: "Strategist proposes" },
   risk_officer: { icon: "3", label: "Risk Officer reviews" },
   walrus: { icon: "4", label: "Store on Walrus" },
@@ -83,18 +84,41 @@ export default function AgentPage() {
         </div>
       )}
 
-      <button
-        onClick={runCycle}
-        disabled={running}
-        style={{
-          alignSelf: "flex-start", padding: "12px 28px", fontSize: 16, fontWeight: 600,
-          borderRadius: 10, border: "none", cursor: running ? "default" : "pointer",
-          background: running ? "var(--border)" : "#0284c7",
-          color: running ? "var(--text-muted)" : "#fff",
-        }}
-      >
-        {running ? "Running cycle… (20-40s)" : "Run one cycle"}
-      </button>
+      <div style={{ position: "relative", display: "inline-block", alignSelf: "flex-start" }}>
+        <button
+          disabled={running}
+          aria-hidden="true"
+          tabIndex={-1}
+          style={{
+            padding: "12px 28px", fontSize: 16, fontWeight: 600,
+            borderRadius: 10, border: "none", cursor: "default",
+            background: running ? "var(--border)" : "#0284c7",
+            color: running ? "var(--text-muted)" : "#fff",
+            pointerEvents: "none",
+          }}
+        >
+          {running ? "Running cycle… (20-40s)" : "Run one cycle"}
+        </button>
+        <span
+          onClick={() => { if (!running) runCycle(); }}
+          title="Run one cycle"
+          style={{
+            position: "absolute",
+            top: -12,
+            right: -14,
+            fontSize: 26,
+            lineHeight: 1,
+            color: "#ff4da6",
+            cursor: running ? "default" : "pointer",
+            userSelect: "none",
+            transform: "rotate(18deg)",
+            textShadow: "0 1px 2px rgba(0,0,0,0.15)",
+            opacity: running ? 0.4 : 1,
+          }}
+        >
+          ♥
+        </span>
+      </div>
 
       {err && <div style={{ color: "#dc2626", fontSize: 14 }}>Error: {err}</div>}
 
@@ -133,6 +157,36 @@ function StepCard({ step }: { step: AgentStep }) {
         )}
         {step.proposal && (
           <div><b style={{ color: "var(--text)" }}>{step.proposal.action}</b> size {fmtDusdc(step.proposal.size)} DUSDC — {step.proposal.thesis}</div>
+        )}
+        {step.stage === "position_review" && (
+          (step.open_count ?? 0) === 0 ? (
+            <div>No open positions — nothing to manage yet.</div>
+          ) : (
+            <div>
+              <div style={{ marginBottom: 6 }}>
+                Reviewing <b style={{ color: "var(--text)" }}>{step.open_count}</b> open position
+                {step.open_count === 1 ? "" : "s"} for take-profit / stop-loss
+                {(step.redeem_suggested ?? 0) > 0 && (
+                  <> — <b style={{ color: "#dc2626" }}>{step.redeem_suggested} flagged to redeem</b></>
+                )}
+                .
+              </div>
+              {(step.holdings_review ?? []).map((h, j) => (
+                <div key={j} style={{ marginTop: 2 }}>
+                  <b style={{ color: "var(--text)" }}>{h.side} ${h.strike_usd.toLocaleString()}</b>{" "}
+                  <span
+                    style={{
+                      color: h.action === "redeem" ? "#dc2626" : "#16a34a",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {h.action === "redeem" ? "REDEEM" : "HOLD"}
+                  </span>{" "}
+                  — {h.reason}
+                </div>
+              ))}
+            </div>
+          )
         )}
         {step.review && (
           <div>

@@ -3,6 +3,7 @@
 import { useCurrentAccount } from "@mysten/dapp-kit";
 import { ConnectButton } from "@mysten/dapp-kit";
 import { MyPositions } from "@/components/MyPositions";
+import { SafeBoundary } from "@/components/SafeBoundary";
 
 export default function PortfolioPage() {
   const account = useCurrentAccount();
@@ -36,7 +37,9 @@ export default function PortfolioPage() {
           </div>
         </div>
       ) : (
-        <MyPositions />
+        <SafeBoundary label="Your positions couldn't be loaded. Please refresh.">
+          <MyPositions />
+        </SafeBoundary>
       )}
     </div>
   );
