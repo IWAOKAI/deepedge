@@ -160,18 +160,22 @@ function UpBiasCallout({ buckets }: { buckets: CalibrationBucket[] }) {
   return (
     <div style={{ fontSize: 15, lineHeight: 1.6 }}>
       In the <strong>40–50%</strong> band, traders placed{" "}
-      <strong>{b.up_count}</strong> UP bets vs only{" "}
-      <strong>{b.down_count}</strong> DOWN bets — a strong bullish bias. Those
-      near-even-money UP bets were priced at{" "}
+      <strong>{b.up_count}</strong> UP bets vs{" "}
+      <strong>{b.down_count}</strong> DOWN bets. Those near-even-money UP bets
+      were priced at{" "}
       <strong style={{ color: "var(--primary-dark)" }}>
         {(b.up_implied * 100).toFixed(0)}%
       </strong>{" "}
-      but won only{" "}
-      <strong style={{ color: "var(--down)" }}>
+      but settled in the money{" "}
+      <strong style={{ color: "var(--up)" }}>
         {(b.up_actual * 100).toFixed(0)}%
       </strong>{" "}
-      of the time. DeepEdge surfaces exactly this gap, so you can see when an UP
-      bet sits in the historically over-priced zone.
+      of the time — the market underpriced this band by{" "}
+      <strong style={{ color: "var(--up)" }}>
+        {((b.up_actual - b.up_implied) * 100).toFixed(0)}
+      </strong>{" "}
+      points. DeepEdge measures this gap on every settled bet, so you can see
+      where the market&apos;s price and the real outcome have drifted apart.
     </div>
   );
 }
