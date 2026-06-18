@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api, LedgerEntry, LedgerResponse } from "@/lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:3000";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 const WAL_AGG = API_BASE + "/api/walrus/"; // backend proxy (aggregator 404s on browser Origin)
 
 function fmtDusdc(micro: number): string {

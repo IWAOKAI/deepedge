@@ -15,8 +15,24 @@ const MANDATE: &str = "0x753fb2e637d42067aeea59df6044ddfeb37ac22c92f28c89a8ffc6e
 /// enforces the Mandate on-chain, and verifies the blob -- returning the
 /// structured per-stage result as JSON.
 pub async fn run_agent(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
+    // --- Public-demo rate limit: 20 AI cycles per day (UTC) ---
+    {
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let mut guard = state.agent_runs.lock().unwrap();
+        if guard.0 != today {
+            *guard = (today.clone(), 0);
+        }
+        if guard.1 >= 20 {
+            return Err((StatusCode::TOO_MANY_REQUESTS,
+                "Daily limit reached: this public demo allows 20 AI cycles per day. \
+                 The agent has already run 20 times today — please try again tomorrow. \
+                 (The full agent has no such limit; this only protects the demo.)".to_string()));
+        }
+        guard.1 += 1;
+    }
+
     // The cycle calls the Claude API + Walrus + an on-chain PTB, so it can
     // take ~20-40s. We run the existing, proven Python loop in --json mode.
     let output = tokio::task::spawn_blocking(|| {

@@ -104,6 +104,7 @@ WAL_PUB = 'https://publisher.walrus-testnet.walrus.space/v1/blobs?epochs=1'
 WAL_AGG = 'https://aggregator.walrus-testnet.walrus.space/v1/blobs/'
 KEY = os.environ.get('ANTHROPIC_API_KEY')
 MODEL = 'claude-sonnet-4-5-20250929'
+HAIKU = 'claude-haiku-4-5-20251001'
 PER_BET_CAP = 2000000
 TOTAL_BUDGET = 10000000
 
@@ -111,10 +112,10 @@ def get(path):
     with urllib.request.urlopen(API + path, timeout=15) as r:
         return json.load(r)
 
-def claude(system, user, max_tokens=600):
+def claude(system, user, max_tokens=180, model=None):
     """Call Claude and return the raw text. Bare call, no JSON parsing."""
     body = json.dumps({
-        'model': MODEL, 'max_tokens': max_tokens,
+        'model': model or MODEL, 'max_tokens': max_tokens,
         'system': system,
         'messages': [{'role': 'user', 'content': user}],
     }).encode()
@@ -126,7 +127,7 @@ def claude(system, user, max_tokens=600):
     return txt.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
 
 
-def claude_json(system, user, max_tokens=600, retries=2):
+def claude_json(system, user, max_tokens=180, retries=2, model=None):
     """Call Claude expecting a JSON object back, and parse it robustly.
 
     LLMs occasionally return an empty completion, a prose preamble, or a
@@ -137,7 +138,7 @@ def claude_json(system, user, max_tokens=600, retries=2):
     last_err = None
     for attempt in range(retries + 1):
         try:
-            txt = claude(system, user, max_tokens)
+            txt = claude(system, user, max_tokens, model=model)
             if not txt:
                 raise ValueError("empty completion")
             # Try direct parse first.
@@ -282,7 +283,7 @@ def strategist(oracle, near, cal, dens=None):
     u.append(f"per-bet cap {PER_BET_CAP} (1e6=1 DUSDC), budget {TOTAL_BUDGET}.")
     u.append('Propose a bet. JSON:')
     u.append('{"action":"BET_UP|BET_DOWN|NO_BET","size":<int micro-DUSDC <= cap>,"thesis":"<why, 2 sentences>"}')
-    return claude_json(sys_p, chr(10).join(u))
+    return claude_json(sys_p, chr(10).join(u), max_tokens=400)
 
 # ---- Agent 2: Risk Officer ----
 def risk_officer(proposal, oracle, near, cal, dens=None, vault=None, xv=None):
@@ -311,7 +312,7 @@ def risk_officer(proposal, oracle, near, cal, dens=None, vault=None, xv=None):
     u.append(f"limits: per-bet cap {PER_BET_CAP}, budget {TOTAL_BUDGET}.")
     u.append('Review. JSON:')
     u.append('{"approved":true|false,"adjusted_size":<int micro-DUSDC, 0 if vetoed>,"calibration_adjusted_prob":<0..1>,"verdict":"<reasoning, 2-3 sentences>"}')
-    return claude_json(sys_p, chr(10).join(u))
+    return claude_json(sys_p, chr(10).join(u), max_tokens=400)
 
 # ---- Walrus + verify ----
 def store_walrus(b):

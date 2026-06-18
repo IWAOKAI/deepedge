@@ -64,7 +64,7 @@ export default function RootLayout({
                 Vault
               </Link>
               <Link href="/cross-venue" style={{ color: "var(--text)", textDecoration: "none" }}>
-                Cross-Venue
+                Reality Check
               </Link>
               <Link href="/portfolio" style={{ color: "var(--text)", textDecoration: "none" }}>
                 Portfolio

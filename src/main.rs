@@ -43,7 +43,8 @@ async fn main() -> anyhow::Result<()> {
 
     let predict_client = Arc::new(PredictServerClient::new()?);
     let cross_venue_client = std::sync::Arc::new(deepedge::client::cross_venue::CrossVenueClient::new());
-    let state = AppState { predict_client, cross_venue_client };
+    let state = AppState { predict_client, cross_venue_client,
+        agent_runs: std::sync::Arc::new(std::sync::Mutex::new((String::new(), 0))) };
 
     let app = Router::new()
         .route("/", get(root))

@@ -23,7 +23,7 @@ export default function CrossVenuePage() {
 
   return (
     <div style={{ maxWidth: 860, margin: "0 auto", padding: "32px 20px" }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, color: "var(--text)" }}>Cross-Venue</h1>
+      <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, color: "var(--text)" }}>Reality Check</h1>
       <p style={{ color: "var(--muted)", marginTop: 8, lineHeight: 1.6, maxWidth: 640 }}>
         Is this on-chain market&apos;s pricing in line with the rest of the world? We compare its
         expected volatility against two of the largest crypto venues — Deribit (the main
@@ -34,7 +34,7 @@ export default function CrossVenuePage() {
 
       {error && (
         <div style={{ marginTop: 24, padding: 16, borderRadius: 8, background: "#fee2e2", color: "#dc2626" }}>
-          Couldn&apos;t load the cross-venue read: {error}.
+          Couldn&apos;t load the reality check: {error}.
         </div>
       )}
 

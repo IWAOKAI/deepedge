@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::client::PredictServerClient;
 use crate::engine::{
@@ -19,6 +19,8 @@ const PREDICT_ID: &str = "0xc8736204d12f0a7277c86388a68bf8a194b0a14c5538ad13f22c
 pub struct AppState {
     pub predict_client: Arc<PredictServerClient>,
     pub cross_venue_client: Arc<crate::client::cross_venue::CrossVenueClient>,
+    // Public-demo rate limit for the AI cycle: (yyyy-mm-dd UTC, count today)
+    pub agent_runs: Arc<Mutex<(String, u32)>>,
 }
 
 #[derive(Serialize)]

@@ -274,10 +274,11 @@ git-ignored.
 
 ### On-chain proof (testnet)
 
-- Mandate package: `0xb82750b35a213320d5ad6204e7bce46493ae76340e2a018fd65fdca4ad08f34a`
-- Mandate object: `0x753fb2e637d42067aeea59df6044ddfeb37ac22c92f28c89a8ffc6e3a4635f3a`
-- Example verifiable-loop cycle: digest `9HZVqeiYsEHQdwh8FGwnKvC9Z3f5Vf9TPrBhvK67QUGc`
-- Real DeepBook Predict positions minted on testnet, including via the atomic Mandate + `predict::mint` PTB
+- **Mandate package** (live demo): `0xb82750b35a213320d5ad6204e7bce46493ae76340e2a018fd65fdca4ad08f34a`
+- **Mandate object**: `0x753fb2e637d42067aeea59df6044ddfeb37ac22c92f28c89a8ffc6e3a4635f3a`
+- **Example verifiable-loop cycle**: digest `9HZVqeiYsEHQdwh8FGwnKvC9Z3f5Vf9TPrBhvK67QUGc`
+
+**Integrated with the canonical DeepBook Predict.** A companion package `0x255c956a9414038019dcef7e966cdc507b64e67d007b6b3623f1701e466668d4` wraps `execute_bet` around the *canonical* Predict (`0xf5ea2b3749c65d6e56507cc35388719aadb28f9cab873696a2f8687f5c785138`) — authorize, mint, record, atomically. Proof: tx [`DrX6K3C5DiZJGVToF8Mb7YgQDewmTmo7LNU9d92Nig8R`](https://testnet.suivision.xyz/txblock/DrX6K3C5DiZJGVToF8Mb7YgQDewmTmo7LNU9d92Nig8R) emits, in one transaction, `predict::PositionMinted` (from DeepBook Predict) **and** `mandate::BetAuthorized` (from our Mandate). The PositionMinted is theirs; the BetAuthorized is ours.
 
 
 ---
@@ -289,7 +290,7 @@ git-ignored.
 - **Insights** — the calibration backtest, visualized: where the market is mispriced, by direction.
 - **Density** — the risk-neutral distribution the SVI surface prices, plotted, with mode, P(up), and 90% range; the same g(k) as the arbitrage check.
 - **Vault** — the PLP vault's solvency grade (GREEN / AMBER / RED) with worst-case payout coverage, utilization, and exit liquidity; the same read the Risk Officer uses.
-- **Cross-Venue** — Predict's ATM IV against Deribit DVOL and Binance realized vol, with the rich/cheap verdict and the volatility risk premium.
+- **Reality Check** — Predict's ATM IV against Deribit DVOL and Binance realized vol, with the rich/cheap verdict and the volatility risk premium.
 - **Portfolio** — your on-chain betting history, account value, and realized P&L.
 - **AI Agent** — the verifiable autonomous loop, live: press *Run one cycle* and watch the Strategist propose, the Risk Officer veto, the decision land on Walrus, the hash verify, and the Mandate enforce — all on-chain.
 - **Ledger** — the agent's entire decision history, auditable: every cycle (bet, veto, or no-bet) with both agents' reasoning, its Walrus blob and SHA-256, and a *Verify hash* button that re-fetches the blob and re-checks the hash in your browser. A trading bot says "trust me"; this page says "check me".
