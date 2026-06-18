@@ -106,6 +106,7 @@ KEY = os.environ.get('ANTHROPIC_API_KEY')
 MODEL = 'claude-sonnet-4-5-20250929'
 HAIKU = 'claude-haiku-4-5-20251001'
 PER_BET_CAP = 2000000
+MANAGER_ID = "0x870882ba3c97b28c5bc4546149c4ab27bb40156259ec814d8b9ff8eed1703fa6"
 TOTAL_BUDGET = 10000000
 
 def get(path):
@@ -349,6 +350,74 @@ def enforce_and_record(amount, hash_hex, blob_id):
         f'@{MANDATE}', 'receipt', '--gas-budget', '50000000']
     return subprocess.run(cmd, capture_output=True, text=True)
 
+def fetch_open_positions():
+    """Fetch the manager's live binary holdings (minted minus redeemed), so the
+    Risk Officer can judge whether to take profit or cut a loss before expiry."""
+    mgr = os.environ.get("DEEPEDGE_MANAGER", MANAGER_ID)
+    try:
+        d = get(f"/api/manager/positions?manager={mgr}")
+    except Exception:
+        return []
+    minted = d.get("minted", []) or []
+    redeemed = d.get("redeemed", []) or []
+    open_pos = []
+    for m in minted:
+        rq = sum(
+            r.get("quantity", 0)
+            for r in redeemed
+            if r.get("oracle_id") == m.get("oracle_id")
+            and r.get("strike") == m.get("strike")
+            and r.get("is_up") == m.get("is_up")
+        )
+        if m.get("quantity", 0) > rq:
+            open_pos.append(m)
+    return open_pos
+
+
+def redeem_officer(positions, oracle, near):
+    """A risk-management pass over open positions. For each holding the agent
+    decides hold vs redeem (take-profit / stop-loss) given how the market has
+    moved since entry. Returns a list of {strike, is_up, action, reason}."""
+    if not positions:
+        return []
+    spot = oracle.get("spot_usd") or oracle.get("forward_usd") or near["strike_usd"]
+    # Summarise each holding compactly for the model.
+    holdings = []
+    for p in positions[:8]:
+        strike = p.get("strike", 0) / 1e9
+        cost = p.get("cost", 0) / 1e6
+        qty = p.get("quantity", 0) / 1e6
+        holdings.append({
+            "side": "UP" if p.get("is_up") else "DOWN",
+            "strike_usd": round(strike, 0),
+            "cost_dusdc": round(cost, 2),
+            "qty": round(qty, 2),
+        })
+    sysmsg = (
+        "You are the Risk Officer managing open prediction-market positions. "
+        "For each holding decide whether to HOLD to expiry or REDEEM now "
+        "(take profit if it has moved your way and could reverse, or cut a loss "
+        "if the move has gone against you). Be conservative: only redeem when "
+        "there is a clear reason. Reply ONLY with a JSON array, one object per "
+        'holding, like [{"side":"UP","strike_usd":64000,"action":"hold",'
+        '"reason":"..."}]. action is "hold" or "redeem". Keep reasons under 18 words.'
+    )
+    usr = (
+        f"Spot {oracle.get('underlying_asset','BTC')} ${spot:,.0f}, "
+        f"expiry {oracle.get('expiry_iso','')}. Open positions: "
+        f"{json.dumps(holdings, ensure_ascii=False)}"
+    )
+    try:
+        out = claude_json(sysmsg, usr, max_tokens=400)
+        if isinstance(out, list):
+            return out
+        if isinstance(out, dict) and "positions" in out:
+            return out["positions"]
+    except Exception:
+        pass
+    return []
+
+
 def run_cycle_json():
     """Run one 2-agent cycle and return a structured dict (for the API)."""
     import io, contextlib
@@ -366,6 +435,17 @@ def run_cycle_json():
             "density": dens,
             "vault_health": vault,
             "cross_venue": xv})
+
+        # 1.5 position review -- the Risk Officer also manages the exit, not
+        # just the entry: it looks at open holdings and decides hold vs redeem
+        # (take-profit / stop-loss) before they reach expiry.
+        open_pos = fetch_open_positions()
+        redeem_review = redeem_officer(open_pos, oracle, near)
+        redeem_count = sum(1 for r in redeem_review if r.get("action") == "redeem")
+        steps.append({"stage": "position_review", "status": "done",
+            "open_count": len(open_pos),
+            "redeem_suggested": redeem_count,
+            "review": redeem_review})
 
         # 2. strategist
         prop = strategist(oracle, near, cal, dens)
