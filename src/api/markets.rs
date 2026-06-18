@@ -403,6 +403,45 @@ pub async fn get_walrus_blob(
     Ok(response)
 }
 
+#[derive(Deserialize)]
+pub struct VerifyQuery {
+    pub blob_id: String,
+    pub expected_sha: String,
+}
+
+/// Server-side blob verification: fetch the Walrus blob, SHA-256 it, and
+/// compare against the recorded hash. This runs the same check the browser
+/// would, but works over plain HTTP where the Web Crypto API (crypto.subtle)
+/// is unavailable outside a secure context.
+pub async fn verify_blob(
+    Query(q): Query<VerifyQuery>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    use sha2::{Digest, Sha256};
+    let url = format!("https://aggregator.walrus-testnet.walrus.space/v1/blobs/{}", q.blob_id);
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    if !resp.status().is_success() {
+        return Err((StatusCode::NOT_FOUND, format!("walrus aggregator returned {}", resp.status())));
+    }
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+    let mut hasher = Sha256::new();
+    hasher.update(&bytes);
+    let computed = hex::encode(hasher.finalize());
+    let matches = computed == q.expected_sha;
+    Ok(Json(serde_json::json!({
+        "match": matches,
+        "computed_sha": computed,
+        "expected_sha": q.expected_sha,
+    })))
+}
+
 
 #[derive(Deserialize)]
 pub struct ManagerQuery {

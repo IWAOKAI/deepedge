@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { api, LedgerEntry, LedgerResponse } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
-const WAL_AGG = API_BASE + "/api/walrus/"; // backend proxy (aggregator 404s on browser Origin)
 
 function fmtDusdc(micro: number): string {
   return (micro / 1_000_000).toFixed(2);
@@ -89,20 +88,21 @@ function LedgerCard({ entry, index }: { entry: LedgerEntry; index: number }) {
     setVerify("running");
     setVerifyMsg("fetching blob from Walrus…");
     try {
-      const res = await fetch(WAL_AGG + entry.blob_id);
-      if (!res.ok) throw new Error(`aggregator HTTP ${res.status}`);
-      const buf = await res.arrayBuffer();
-      setVerifyMsg("re-hashing…");
-      const digest = await crypto.subtle.digest("SHA-256", buf);
-      const hex = Array.from(new Uint8Array(digest))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-      if (hex === entry.sha256) {
+      // Hash the blob server-side: the Web Crypto API (crypto.subtle) is only
+      // available in a secure context, so it is undefined over plain HTTP.
+      // The backend fetches the same Walrus blob and SHA-256s it identically.
+      setVerifyMsg("re-hashing on server…");
+      const res = await fetch(
+        `${API_BASE}/api/verify?blob_id=${encodeURIComponent(entry.blob_id!)}&expected_sha=${encodeURIComponent(entry.sha256!)}`
+      );
+      if (!res.ok) throw new Error(`verify HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.match) {
         setVerify("ok");
         setVerifyMsg("hash matches — this reasoning is exactly what was recorded");
       } else {
         setVerify("fail");
-        setVerifyMsg(`hash mismatch: got ${hex.slice(0, 16)}…`);
+        setVerifyMsg(`hash mismatch: got ${String(data.computed_sha).slice(0, 16)}…`);
       }
     } catch (err) {
       setVerify("fail");

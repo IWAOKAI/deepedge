@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use deepedge::api::{AppState, list_markets, get_market, get_strikes, get_density, get_surface_health, get_calendar_health, get_walrus_blob, get_edges, get_manager, get_positions, get_ranges, get_summary, get_vault_health, get_cross_venue, run_agent, agent_status, agent_ledger};
+use deepedge::api::{AppState, list_markets, get_market, get_strikes, get_density, get_surface_health, get_calendar_health, get_walrus_blob, verify_blob, get_edges, get_manager, get_positions, get_ranges, get_summary, get_vault_health, get_cross_venue, run_agent, agent_status, agent_ledger};
 use deepedge::api::backtest::{calibration, accuracy};
 use deepedge::client::PredictServerClient;
 use tower_http::cors::CorsLayer;
@@ -56,6 +56,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/markets/:oracle_id/surface-health", get(get_surface_health))
         .route("/api/surface/calendar-health", get(get_calendar_health))
         .route("/api/walrus/:blob_id", get(get_walrus_blob))
+        .route("/api/verify", get(verify_blob))
         .route("/api/markets/:oracle_id/edges", get(get_edges))
         .route("/api/backtest/calibration", get(calibration))
         .route("/api/backtest/accuracy", get(accuracy))
