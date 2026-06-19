@@ -8,9 +8,11 @@ A trader-facing analytics and betting layer for DeepBook Predict on Sui — see 
 
 ## 🎥 Demo
 
-**▶ [Watch the demo video](https://www.youtube.com/watch?v=hoIOYAMy9ks)** — the full agent loop, the on-chain Mandate, and live hash verification in the Ledger.
+**▶ [Watch the demo video](https://www.youtube.com/watch?v=tMtxQUu4lkE)** — the full agent loop, the on-chain Mandate, and live hash verification in the Ledger.
 
-[![DeepEdge demo](docs/screenshots/market.png)](https://www.youtube.com/watch?v=hoIOYAMy9ks)
+**🌐 [Try it live → deepedge.win](https://deepedge.win)** — the real app on Sui testnet. Open a market and tap a bet yourself.
+
+[![DeepEdge demo](docs/screenshots/market.png)](https://www.youtube.com/watch?v=tMtxQUu4lkE)
 
 ---
 
