@@ -57,10 +57,11 @@ export default function AgentPage() {
           Autonomous AI Agent
         </h1>
         <p style={{ color: "var(--text-muted)", marginTop: 8, maxWidth: 680 }}>
-          Two Claude agents observe a live DeepBook Predict market, reason
-          against historical calibration, and act only within an on-chain
-          Mandate. Every decision is stored on Walrus and hash-anchored
-          on-chain, so the whole loop is independently verifiable.
+          Two AI agents work as a team on a real market. One proposes a
+          bet; the other checks whether it would actually win, using the
+          market&apos;s own track record. The AI can only spend up to a fixed
+          on-chain limit &mdash; it simply cannot go over. Every decision is
+          saved and stamped on-chain, so anyone can verify it for themselves.
         </p>
       </div>
 
@@ -80,7 +81,7 @@ export default function AgentPage() {
             <div style={{ height: "100%", width: `${Math.min(100, (Number(mandate.spent) / Number(mandate.total_budget)) * 100)}%`, background: "#0284c7" }} />
           </div>
           <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10, marginBottom: 0 }}>
-            Formally verified (Sui Prover): authorize() can never return a receipt above the per-bet cap, for all inputs.
+            Mathematically proven (Sui Prover): the AI can never bet more than this cap &mdash; in any situation. Guaranteed by a formal proof, not just testing.
           </p>
         </div>
       )}
