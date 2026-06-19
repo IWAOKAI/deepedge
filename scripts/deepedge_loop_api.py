@@ -22,9 +22,7 @@ def notify_telegram(result):
             return
 
         def esc(s):
-            # Escape MarkdownV2 reserved characters.
-            for ch in r"_*[]()~`>#+-=|{}.!":
-                s = s.replace(ch, "\\" + ch)
+            # plain text mode: no MarkdownV2 escaping needed
             return s
 
         steps = result.get("steps", [])
@@ -72,7 +70,6 @@ def notify_telegram(result):
         data = urllib.parse.urlencode({
             "chat_id": chat,
             "text": text,
-            "parse_mode": "MarkdownV2",
             "disable_web_page_preview": "true",
         }).encode()
         req = urllib.request.Request(
