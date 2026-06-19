@@ -27,6 +27,7 @@ function hoursUntil(iso: string): string {
 
 export default function AgentPage() {
   const [running, setRunning] = useState(false);
+  const [popping, setPopping] = useState(false);
   const [result, setResult] = useState<AgentResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [mandate, setMandate] = useState<MandateStatus | null>(null);
@@ -101,6 +102,10 @@ export default function AgentPage() {
         </button>
         <span
           onClick={() => { if (!running) runCycle(); }}
+          onMouseEnter={() => {
+            setPopping(true);
+            setTimeout(() => setPopping(false), 260);
+          }}
           title="Run one cycle"
           style={{
             position: "absolute",
@@ -112,6 +117,7 @@ export default function AgentPage() {
             cursor: running ? "default" : "pointer",
             userSelect: "none",
             transform: "rotate(18deg)",
+            animation: popping ? "heartWiggle 0.4s ease-in-out" : "none",
             textShadow: "0 1px 2px rgba(0,0,0,0.15)",
             opacity: running ? 0.4 : 1,
           }}

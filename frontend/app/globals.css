@@ -62,3 +62,13 @@ body {
   background: #e2e8f0;
   color: #475569;
 }
+
+/* Heart accent on the agent run button: a small left-right wiggle on hover. */
+@keyframes heartWiggle {
+  0%   { transform: rotate(18deg) translateX(0); }
+  20%  { transform: rotate(18deg) translateX(-3px); }
+  40%  { transform: rotate(18deg) translateX(3px); }
+  60%  { transform: rotate(18deg) translateX(-2px); }
+  80%  { transform: rotate(18deg) translateX(2px); }
+  100% { transform: rotate(18deg) translateX(0); }
+}
