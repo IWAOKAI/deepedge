@@ -216,7 +216,7 @@ export interface AgentStep {
   status: string;
   market?: { asset: string; expiry: string; strike_usd: number; oracle_id: string };
   fair?: { up: number; down: number };
-  proposal?: { action: string; size: number; thesis: string };
+  proposal?: { action: string; size: number; thesis: string; lower_strike?: number | null; higher_strike?: number | null };
   review?: { approved: boolean; adjusted_size: number; calibration_adjusted_prob: number; verdict: string };
   blob_id?: string;
   sha256?: string;

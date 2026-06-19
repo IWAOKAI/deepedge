@@ -163,7 +163,7 @@ function StepCard({ step }: { step: AgentStep }) {
           <div>{step.market.asset} @ ${step.market.strike_usd.toLocaleString()} · exp {step.market.expiry.slice(0,10)} ({hoursUntil(step.market.expiry)}) · fair P(up) {step.fair ? step.fair.up.toFixed(4) : ""}</div>
         )}
         {step.proposal && (
-          <div><b style={{ color: "var(--text)" }}>{step.proposal.action}</b> size {fmtDusdc(step.proposal.size)} DUSDC — {step.proposal.thesis}</div>
+          <div><b style={{ color: "var(--text)" }}>{step.proposal.action}</b>{step.proposal.action === "BET_RANGE" && step.proposal.lower_strike != null && step.proposal.higher_strike != null ? ` $${step.proposal.lower_strike.toLocaleString()}–$${step.proposal.higher_strike.toLocaleString()}` : ""} size {fmtDusdc(step.proposal.size)} DUSDC — {step.proposal.thesis}</div>
         )}
         {step.stage === "position_review" && (
           (step.open_count ?? 0) === 0 ? (
