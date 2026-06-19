@@ -6,7 +6,7 @@ use crate::api::markets::AppState;
 
 const RPC: &str = "https://fullnode.testnet.sui.io:443";
 const PACKAGE: &str = "0xb82750b35a213320d5ad6204e7bce46493ae76340e2a018fd65fdca4ad08f34a";
-const MANDATE: &str = "0x753fb2e637d42067aeea59df6044ddfeb37ac22c92f28c89a8ffc6e3a4635f3a";
+const MANDATE: &str = "0x215e9f0c5b894dccdaf189d4a3e041f181f5a854cc814ad8cfd4c1061ddf0dd9";
 
 
 /// POST /api/agent/run

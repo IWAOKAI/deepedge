@@ -99,8 +99,8 @@ def append_ledger(result):
 
 API = 'http://localhost:3000'
 PKG = '0xb82750b35a213320d5ad6204e7bce46493ae76340e2a018fd65fdca4ad08f34a'
-MANDATE = '0x753fb2e637d42067aeea59df6044ddfeb37ac22c92f28c89a8ffc6e3a4635f3a'
-WAL_PUB = 'https://publisher.walrus-testnet.walrus.space/v1/blobs?epochs=1'
+MANDATE = '0x215e9f0c5b894dccdaf189d4a3e041f181f5a854cc814ad8cfd4c1061ddf0dd9'
+WAL_PUB = 'https://publisher.walrus-testnet.walrus.space/v1/blobs?epochs=53'
 WAL_AGG = 'https://aggregator.walrus-testnet.walrus.space/v1/blobs/'
 KEY = os.environ.get('ANTHROPIC_API_KEY')
 MODEL = 'claude-sonnet-4-5-20250929'
@@ -282,8 +282,9 @@ def strategist(oracle, near, cal, dens=None):
     if dens and dens.get("prob_up") is not None:
         u.append(f"Risk-neutral density (Breeden-Litzenberger from the SVI smile): most-likely settlement ${dens['mode_usd']:,.0f}, density-implied P(up) {dens['prob_up']:.4f}, 90% range ${dens['p05_usd']:,.0f}-${dens['p95_usd']:,.0f}. Check whether the strike sits inside this range and whether density P(up) agrees with the model fair P(up).")
     u.append(f"per-bet cap {PER_BET_CAP} (1e6=1 DUSDC), budget {TOTAL_BUDGET}.")
-    u.append('Propose a bet. JSON:')
-    u.append('{"action":"BET_UP|BET_DOWN|NO_BET","size":<int micro-DUSDC <= cap>,"thesis":"<why, 2 sentences>"}')
+    u.append("You may also propose a RANGE bet: the price settling between a lower and a higher strike by expiry. A range wins when the market lands inside the band. Use the density's 90% range and most-likely settlement to pick a band you believe is underpriced -- typically straddling the most-likely settlement. lower_strike and higher_strike are whole USD prices with higher_strike > lower_strike.")
+    u.append('Propose the single best bet. JSON (include lower_strike/higher_strike ONLY for BET_RANGE):')
+    u.append('{"action":"BET_UP|BET_DOWN|BET_RANGE|NO_BET","size":<int micro-DUSDC <= cap>,"lower_strike":<int USD or null>,"higher_strike":<int USD or null>,"thesis":"<why, 2 sentences>"}')
     return claude_json(sys_p, chr(10).join(u), max_tokens=400)
 
 # ---- Agent 2: Risk Officer ----
@@ -311,6 +312,7 @@ def risk_officer(proposal, oracle, near, cal, dens=None, vault=None, xv=None):
         vrp = xv.get("vol_risk_premium")
         u.append(f"CROSS-VENUE VOL CHECK: Predict ATM IV {piv:.0f}% vs Deribit DVOL {dvol:.0f}% -> Predict is {xv['predict_richness']}. Vol-risk-premium (Deribit implied - Binance realized) {vrp:+.0f}%. If Predict is far 'rich' or 'cheap' versus Deribit, the on-chain surface may be mispriced and the model's fair value less trustworthy; weigh that in the risk decision." if (dvol and piv and vrp is not None) else "")
     u.append(f"limits: per-bet cap {PER_BET_CAP}, budget {TOTAL_BUDGET}.")
+    u.append("If the proposal is BET_RANGE, also judge the band itself: does it sit inside the density's 90% range and straddle the most-likely settlement? A band that is too wide wins easily but pays little; too narrow pays well but rarely lands. Veto a range whose band ignores the density (e.g. centered far from the most-likely settlement). For BET_RANGE, calibration_adjusted_prob is your estimate that the price lands inside the band.")
     u.append('Review. JSON:')
     u.append('{"approved":true|false,"adjusted_size":<int micro-DUSDC, 0 if vetoed>,"calibration_adjusted_prob":<0..1>,"verdict":"<reasoning, 2-3 sentences>"}')
     return claude_json(sys_p, chr(10).join(u), max_tokens=400)
@@ -465,6 +467,10 @@ def run_cycle_json():
             "market": {"oracle_id": oid, "asset": oracle["underlying_asset"],
                        "expiry": oracle["expiry_iso"], "strike_usd": near["strike_usd"]},
             "fair": {"up": near["up"]["fair"], "down": near["down"]["fair"]},
+            "action": prop.get("action"),
+            "range": ({"lower_strike": prop.get("lower_strike"),
+                       "higher_strike": prop.get("higher_strike")}
+                      if prop.get("action") == "BET_RANGE" else None),
             "strategist": prop, "risk_officer": review,
             "final_size": size, "model": MODEL, "ts": int(time.time())}
         rb = json.dumps(record, sort_keys=True, separators=(",", ":")).encode()
